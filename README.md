@@ -1,85 +1,49 @@
-# Invoice Rescue — Landing Page
+# Invoice Rescue — Landing Site
 
-Static landing page for [Invoice Rescue](https://invoicerescue.co.uk), a professional invoice recovery service for UK freelancers and small businesses.
+Professional invoice recovery for UK freelancers and small businesses. 12% success fee, no win no fee.
 
-## Local Development
+**Live at:** [invoicerescue.co.uk](https://invoicerescue.co.uk)
 
-No build step. No npm. No bundler.
-
-Open `index.html` directly in a browser:
-
-```
-# macOS / Linux
-open index.html
-
-# Windows
-start index.html
-```
-
-Or serve it with any static file server, e.g.:
-
-```
-npx serve .
-# or
-python -m http.server 8080
-```
-
-All styles are in `style.css`, all behaviour in `script.js`. Google Fonts are loaded from CDN — an internet connection is required for fonts to render correctly in development.
-
-## Deployment — Cloudflare Pages
-
-### First deploy
-
-1. Push this repo to GitHub (see git commands below).
-2. Go to [pages.cloudflare.com](https://pages.cloudflare.com) and click **Create a project**.
-3. Connect your GitHub account and select the `invoice-rescue-landing` repository.
-4. Configure the build settings:
-   - **Framework preset**: None
-   - **Build command**: *(leave blank)*
-   - **Build output directory**: `.` (a single dot — the repo root)
-   - **Environment variables**: none required
-5. Click **Save and Deploy**. Cloudflare builds and publishes in ~30 seconds.
-
-### Custom domain (invoicerescue.co.uk)
-
-After the first deploy:
-
-1. In the Cloudflare Pages project, go to **Custom domains** → **Set up a custom domain**.
-2. Enter `invoicerescue.co.uk` and follow the DNS instructions.
-3. If your domain is already on Cloudflare, the CNAME/ALIAS is added automatically.
-4. Wait for DNS propagation (usually instant on Cloudflare, up to 48 hrs elsewhere).
-
-### Subsequent deploys
-
-Push to the `main` branch — Cloudflare Pages auto-deploys on every push. No CI config needed.
-
-## File Structure
+## Site Structure
 
 ```
 invoice-rescue-landing/
-├── index.html      ← Single-page site, all sections inline
-├── style.css       ← Design system, layout, components, responsive
-├── script.js       ← FAQ accordion, sticky nav, mailto CTAs, scroll animations
-├── wrangler.toml   ← Cloudflare Pages config (static site, no Workers)
-├── .gitignore
-└── README.md
+├── index.html                  Home
+├── how-it-works/index.html     How It Works
+├── pricing/index.html          Pricing
+├── who-we-help/index.html      Who We Help
+├── about/index.html            About
+├── contact/index.html          Contact / Case Review Form
+├── style.css                   Shared stylesheet
+├── script.js                   Shared JavaScript
+├── sitemap.xml                 XML Sitemap
+├── robots.txt                  Robots.txt
+├── .gitignore                  Git ignore rules
+└── README.md                   This file
 ```
 
-## Git Commands
+## Deployment
 
-Initialise the repo and push to GitHub:
+Static site hosted on **Cloudflare Pages**. No build step — plain HTML/CSS/JS.
 
-```bash
-cd D:\Dev\Workspaces\Active\invoice-rescue-landing
+All pages reference shared assets with root-absolute paths (`/style.css`, `/script.js`), and all internal navigation uses root-absolute links (`/pricing/`, `/contact/`, etc.) for correct resolution from any folder depth.
 
-git init
-git add .
-git commit -m "Initial commit — Invoice Rescue landing page"
+## Contact Form
 
-# Create the repo on GitHub first (github.com/new), then:
-git remote add origin https://github.com/YOUR_USERNAME/invoice-rescue-landing.git
-git branch -M main
-git push -u origin main
-```
+The contact page uses [Web3Forms](https://web3forms.com) for form submission (free, no backend required).
 
-Replace `YOUR_USERNAME` with your GitHub username.
+**To activate the form:**
+1. Go to [web3forms.com](https://web3forms.com)
+2. Get a free access key
+3. Replace `YOUR_WEB3FORMS_ACCESS_KEY` in `contact/index.html` with your real key
+
+## Design System
+
+- **Colours:** `--ink:#1C2128` `--slate:#2D3748` `--cloud:#F7F8FA` `--white:#FFFFFF` `--gold:#D4A853` `--gold-light:#F0C97A` `--muted:#6B7280` `--border:#E2E8F0`
+- **Display font:** Playfair Display (h1/h2)
+- **Body font:** Inter
+- **Signature element:** Ghost "£" watermark
+
+## Contact
+
+hello@invoicerescue.co.uk
