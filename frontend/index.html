@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Rescue — we chase your overdue invoices, so you never have to</title>
+<meta name="description" content="Every overdue invoice chased in your name — polite, persistent, professionally escalating — until it's paid. For UK agencies, consultancies and trades. From £349/month.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF7; --ink:#171B21; --muted:#5B6470; --rule:#DDD9CE;
+    --red:#B23A2E; --green:#1E7A4E; --green-dark:#175F3D; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.6;font-size:17px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  header{padding:28px 0;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--rule)}
+  .brand{font-family:Fraunces,serif;font-size:22px;font-weight:600;letter-spacing:-.01em}
+  .brand span{color:var(--green)}
+  header a.cta-small{font-size:14px;font-weight:600;color:var(--green-dark);text-decoration:none;border-bottom:2px solid var(--green)}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .hero{padding:72px 0 40px}
+  h1{font-family:Fraunces,serif;font-weight:600;font-size:clamp(34px,5.6vw,56px);line-height:1.08;letter-spacing:-.02em;margin:14px 0 18px;max-width:17ch}
+  .hero p.sub{max-width:56ch;color:var(--muted);font-size:19px}
+  .cta{display:inline-block;margin-top:28px;background:var(--green);color:#fff;font-weight:600;padding:14px 26px;border-radius:6px;text-decoration:none;border:none;font-size:17px;cursor:pointer}
+  .cta:hover{background:var(--green-dark)}
+  /* Signature: the ledger */
+  .ledger{margin:56px 0 8px;background:var(--card);border:1px solid var(--rule);border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(23,27,33,.05)}
+  .ledger-head{display:flex;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .row{display:grid;grid-template-columns:1fr auto auto;gap:18px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:15px}
+  .row:last-child{border-bottom:none}
+  .row .who{font-family:"IBM Plex Sans",sans-serif}
+  .amount{font-weight:500}
+  .overdue{color:var(--red)}
+  .stamp{display:inline-block;transform:rotate(-4deg);border:2px solid var(--green);color:var(--green);font-weight:600;font-size:12px;letter-spacing:.12em;padding:2px 10px;border-radius:3px;text-transform:uppercase}
+  .ledger-note{font-size:14px;color:var(--muted);padding:4px 2px 0;font-style:italic}
+  section{padding:64px 0;border-top:1px solid var(--rule)}
+  h2{font-family:Fraunces,serif;font-weight:600;font-size:clamp(26px,3.6vw,34px);letter-spacing:-.015em;margin:10px 0 30px}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+  .step h3{font-size:17px;font-weight:600;margin-bottom:8px}
+  .step p{color:var(--muted);font-size:15.5px}
+  .step .k{font-family:"IBM Plex Mono",monospace;color:var(--green);font-size:13px;display:block;margin-bottom:10px}
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .tier{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:26px 22px;display:flex;flex-direction:column}
+  .tier.popular{border-color:var(--green);box-shadow:0 2px 10px rgba(30,122,78,.12)}
+  .tier .name{font-weight:600}
+  .tier .badge{font-size:11px;font-family:"IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-left:8px}
+  .tier .price{font-family:"IBM Plex Mono",monospace;font-size:30px;font-weight:500;margin:12px 0 2px}
+  .tier .per{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .tier ul{list-style:none;font-size:14.5px;color:var(--muted);flex:1}
+  .tier li{padding:6px 0;border-top:1px dashed var(--rule)}
+  .tiers-note{margin-top:18px;font-size:14px;color:var(--muted)}
+  form{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:30px;max-width:640px}
+  label{display:block;font-size:14px;font-weight:600;margin:16px 0 6px}
+  input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--rule);border-radius:6px;font:inherit;font-size:15.5px;background:var(--paper)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+  .hp{position:absolute;left:-5000px;opacity:0;height:0;overflow:hidden}
+  .form-msg{margin-top:14px;font-size:15px;display:none}
+  .form-msg.ok{display:block;color:var(--green-dark);font-weight:600}
+  .form-msg.err{display:block;color:var(--red)}
+  #thanks:target ~ * .form-msg.ok, .show-ok{display:block}
+  footer{border-top:1px solid var(--rule);padding:32px 0 48px;font-size:13.5px;color:var(--muted)}
+  @media (max-width:760px){.steps,.tiers{grid-template-columns:1fr}.row{grid-template-columns:1fr auto}.row .stamp-cell{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Invoice<span>Rescue</span></div>
+    <a class="cta-small" href="#audit">Free late-payment audit</a>
+  </header>
+
+  <div class="hero">
+    <span class="eyebrow">Late-payment chasing for UK service businesses</span>
+    <h1>You did the work. We make sure you get paid.</h1>
+    <p class="sub">Every overdue invoice chased in your name — polite, persistent, professionally
+    escalating — until it's settled. Clients typically see money land two to three weeks sooner.
+    And you never have to send the awkward email again.</p>
+    <a class="cta" href="#audit">Get your free late-payment audit</a>
+
+    <div class="ledger" role="img" aria-label="Example ledger showing overdue invoices being collected">
+      <div class="ledger-head"><span>Aged receivables</span><span>Days overdue</span></div>
+      <div class="row"><span class="who">Invoice #247 — Hartley &amp; Co</span><span class="amount overdue">£4,850</span><span class="overdue">43 days</span></div>
+      <div class="row"><span class="who">Invoice #251 — Meridian Build</span><span class="amount overdue">£12,300</span><span class="overdue">31 days</span></div>
+      <div class="row"><span class="who">Invoice #238 — Foxglove Studio</span><span class="amount">£2,150</span><span class="stamp-cell"><span class="stamp">Paid · day 11</span></span></div>
+    </div>
+    <p class="ledger-note">Illustrative ledger. Late payment costs UK businesses an estimated £11&nbsp;billion a year — most of it recoverable with consistent, professional follow-up.</p>
+  </div>
+
+  <section id="how">
+    <span class="eyebrow">How it works</span>
+    <h2>Consistent chasing, without you lifting a finger</h2>
+    <div class="steps">
+      <div class="step"><span class="k">01 · Connect</span><h3>Share your ledger</h3><p>Connect Xero or QuickBooks, or simply send us your invoice list. We map every overdue invoice and each debtor's history in one day.</p></div>
+      <div class="step"><span class="k">02 · We chase</span><h3>Escalating sequences, in your name</h3><p>Polite reminder → firm follow-up → formal notice with statutory late-payment interest where appropriate. Every message drafted for your brand voice and reviewed by a human before it's sent.</p></div>
+      <div class="step"><span class="k">03 · You get paid</span><h3>Friday cash report</h3><p>Every week: what's been paid, what's been promised, what's escalating next. You always know exactly where your money is.</p></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <span class="eyebrow">Pricing</span>
+    <h2>Less than a day of a credit controller's salary</h2>
+    <div class="tiers">
+      <div class="tier">
+        <div><span class="name">Foundation</span></div>
+        <div class="price">£349</div><div class="per">per month · no long contract</div>
+        <ul><li>Up to 15 active invoices chased</li><li>Email reminder sequences in your name</li><li>Friday cash report</li></ul>
+      </div>
+      <div class="tier popular">
+        <div><span class="name">Engine</span><span class="badge">Most popular</span></div>
+        <div class="price">£649</div><div class="per">per month · 3-month minimum</div>
+        <ul><li>Up to 40 active invoices chased</li><li>Full escalation incl. formal notices &amp; statutory interest calculations</li><li>Debtor-days tracking &amp; monthly trend report</li><li>Priority response on disputes</li></ul>
+      </div>
+      <div class="tier">
+        <div><span class="name">Operator</span></div>
+        <div class="price">£1,250</div><div class="per">per month · 3-month minimum</div>
+        <ul><li>Unlimited invoices, multiple entities</li><li>Custom sequences &amp; debtor strategies</li><li>Monthly cash-flow review (recorded video walkthrough)</li><li>Direct accounting-system integration</li></ul>
+      </div>
+    </div>
+    <p class="tiers-note">An in-house credit controller costs £22,000–£30,000 a year. Invoice Rescue starts at £4,188.</p>
+  </section>
+
+  <section id="audit">
+    <span id="thanks"></span>
+    <span class="eyebrow">Free audit · no obligation</span>
+    <h2>See what you're owed — and what we'd do about it</h2>
+    <p style="max-width:56ch;color:var(--muted)">Send us the basics and we'll reply within one working day with a short, honest audit: how much is realistically recoverable, which invoices to escalate first, and the exact sequence we'd run. Keep it and use it yourself, or let us run it for you.</p>
+    <form method="post" action="/api/lead" id="lead-form" novalidate>
+      <label for="f-name">Your name</label>
+      <input id="f-name" name="name" required maxlength="120" autocomplete="name">
+      <label for="f-email">Work email</label>
+      <input id="f-email" name="email" type="email" required maxlength="200" autocomplete="email">
+      <label for="f-company">Company</label>
+      <input id="f-company" name="company" maxlength="160" autocomplete="organization">
+      <label for="f-band">Roughly how much is overdue right now?</label>
+      <select id="f-band" name="overdue_band" required>
+        <option value="">Choose…</option>
+        <option value="under_5k">Under £5,000</option>
+        <option value="5k_25k">£5,000 – £25,000</option>
+        <option value="25k_100k">£25,000 – £100,000</option>
+        <option value="over_100k">Over £100,000</option>
+        <option value="not_sure">Not sure — that's part of the problem</option>
+      </select>
+      <label for="f-message">Anything we should know? (optional)</label>
+      <textarea id="f-message" name="message" rows="3" maxlength="2000"></textarea>
+      <div class="hp" aria-hidden="true">
+        <label for="f-website">Website</label>
+        <input id="f-website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+      <button class="cta" type="submit" style="margin-top:22px">Request my free audit</button>
+      <p class="form-msg ok" id="msg-ok">Thanks — your audit request is in. We'll reply within one working day from hello@invoicerescue.co.uk.</p>
+      <p class="form-msg err" id="msg-err"></p>
+    </form>
+  </section>
+
+  <footer>
+    Invoice Rescue · Operated by Tibor Rames, United Kingdom · invoicerescue.co.uk · hello@invoicerescue.co.uk<br>
+    Chasing is conducted lawfully and courteously under UK late-payment legislation. We are a credit-control service, not a debt collection agency or a law firm.<br>
+    <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a>
+  </footer>
+</div>
+<script>
+  // Progressive enhancement: submit via fetch for an inline success message.
+  // Without JS, the form still posts and redirects to /#thanks.
+  const form = document.getElementById("lead-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ok = document.getElementById("msg-ok");
+    const err = document.getElementById("msg-err");
+    ok.classList.remove("show-ok"); err.textContent = "";
+    try {
+      const res = await fetch("/api/lead", {
+        method: "POST",
+        headers: { "Accept": "application/json" },
+        body: new FormData(form),
+      });
+      const data = await res.json();
+      if (data.ok) { form.reset(); ok.classList.add("show-ok"); }
+      else { err.textContent = data.error || "Please check the form and try again."; }
+    } catch {
+      err.textContent = "Connection problem — please email hello@invoicerescue.co.uk instead.";
+    }
+  });
+  // Show success note after no-JS redirect.
+  if (location.hash === "#thanks") document.getElementById("msg-ok").classList.add("show-ok");
+</script>
+</body>
+</html>

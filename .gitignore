@@ -2,6 +2,8 @@
 Thumbs.db
 node_modules/
 .env
+.dev.vars
 *.log
+.wrangler/
 
 .agent/

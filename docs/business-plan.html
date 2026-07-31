@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The 1-Person AI Powered Business Plan — Invoice Rescue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E12; --bg2:#0F1319; --card:#12161C; --card-hi:#161B22;
+    --ink:#E9EDF2; --muted:#8B95A3; --faint:#565F6D; --rule:#232932;
+    --lime:#A8E85C; --lime-dim:#7FB847; --red:#FF6B5B; --amber:#E8B75C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.65;font-size:16.5px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:0 28px}
+  a{color:var(--lime)}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--lime)}
+  h1,h2,h3{font-family:Fraunces,serif;letter-spacing:-.01em}
+  .mono{font-family:"JetBrains Mono",monospace}
+
+  /* HERO */
+  .hero{padding:96px 0 64px;border-bottom:1px solid var(--rule)}
+  .hero h1{font-weight:600;font-size:clamp(32px,5vw,50px);line-height:1.1;max-width:16ch;margin:16px 0 20px}
+  .hero p{color:var(--muted);max-width:56ch;font-size:18px}
+  .hero .brand{margin-top:34px;display:flex;align-items:center;gap:12px;font-size:14px;color:var(--faint)}
+  .hero .brand b{color:var(--ink);font-weight:600}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--lime)}
+
+  /* ABOUT */
+  section{padding:56px 0;border-bottom:1px solid var(--rule)}
+  section h2{font-weight:600;font-size:clamp(24px,3.4vw,30px);margin:10px 0 26px}
+  .about-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+  .about-cell{background:var(--card);padding:20px 22px}
+  .about-cell .label{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+  .about-cell .val{font-size:15.5px}
+
+  /* PART LABEL */
+  .part-tag{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.1em;color:var(--bg);background:var(--lime);padding:4px 10px;border-radius:4px;margin-bottom:14px;font-weight:600}
+  .part-title{font-size:13px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+
+  /* PILL LIST */
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 20px;margin:20px 0}
+  .kv dt{color:var(--faint);font-size:14px;padding:10px 0;border-top:1px solid var(--rule)}
+  .kv dd{padding:10px 0;border-top:1px solid var(--rule);font-size:15.5px}
+  .kv dt:first-child,.kv dd:first-child{border-top:none}
+
+  .quote{font-family:Fraunces,serif;font-style:italic;font-size:19px;color:var(--ink);border-left:2px solid var(--lime);padding:2px 0 2px 20px;margin:22px 0}
+  .quote cite{display:block;font-family:Inter,sans-serif;font-style:normal;font-size:13px;color:var(--faint);margin-top:8px}
+
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+  th{text-align:left;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:10px 14px;border-bottom:1px solid var(--rule)}
+  td{padding:12px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+  td.num,th.num{font-family:"JetBrains Mono",monospace;text-align:right}
+  tr:last-child td{border-bottom:none}
+  .tbl-wrap{background:var(--card);border:1px solid var(--rule);border-radius:10px;overflow:hidden;padding:4px 6px}
+
+  .tier-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0}
+  .tier{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px}
+  .tier.hi{border-color:var(--lime)}
+  .tier .name{font-weight:600;font-size:15px}
+  .tier .badge{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--bg);background:var(--lime);padding:2px 7px;border-radius:3px;margin-left:8px}
+  .tier .price{font-family:"JetBrains Mono",monospace;font-size:24px;margin:10px 0 2px;color:var(--lime)}
+  .tier .per{color:var(--faint);font-size:12.5px}
+
+  .offer-line{background:var(--card-hi);border:1px solid var(--lime);border-radius:10px;padding:22px 24px;margin:26px 0;font-family:Fraunces,serif;font-size:18px;line-height:1.5}
+
+  .steps{counter-reset:step}
+  .step{display:grid;grid-template-columns:40px 1fr;gap:16px;padding:16px 0;border-top:1px solid var(--rule)}
+  .step:first-child{border-top:none}
+  .step .n{font-family:"JetBrains Mono",monospace;color:var(--lime);font-size:14px}
+  .step h4{font-size:15.5px;font-weight:600;margin-bottom:4px}
+  .step p{color:var(--muted);font-size:14.5px}
+
+  .ledger-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:16px 0 8px;background:var(--rule)}
+  .ledger-bar div{height:100%}
+  .ledger-legend{display:flex;gap:18px;font-size:12.5px;color:var(--faint)}
+  .ledger-legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:8px;height:8px;border-radius:2px}
+
+  .finding{margin:30px 0}
+  .finding .fnum{font-family:"JetBrains Mono",monospace;color:var(--lime);font-size:12px;letter-spacing:.1em}
+  .finding h3{font-size:19px;font-weight:600;margin:6px 0 12px}
+
+  .week{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px 22px;margin-bottom:14px}
+  .week .wk{font-family:"JetBrains Mono",monospace;color:var(--lime);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .week h4{font-size:16px;font-weight:600;margin:6px 0 12px}
+  .week ul{padding-left:18px;color:var(--muted);font-size:14.5px}
+  .week li{padding:3px 0}
+
+  footer{padding:40px 0 60px;color:var(--faint);font-size:13px}
+  @media (max-width:720px){.about-grid,.tier-row{grid-template-columns:1fr}.kv{grid-template-columns:1fr}.kv dt{padding-bottom:0;border-top:1px solid var(--rule)}.kv dd{border-top:none;padding-top:2px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <span class="eyebrow">The 1-Person AI Powered Business Plan</span>
+    <h1>The AI credit-control operator for UK service businesses tired of chasing their own money.</h1>
+    <p>A complete, research-validated blueprint for Invoice Rescue — built on what you've already shipped, sized to a £300 budget, and designed around a written-first sales motion so your English confidence never has to carry the close.</p>
+    <div class="brand"><span class="dot"></span>Invoice Rescue · invoicerescue.co.uk · Prepared 15 July 2026</div>
+  </div>
+
+  <section>
+    <span class="eyebrow">About you</span>
+    <h2>Where you're starting from</h2>
+    <div class="about-grid">
+      <div class="about-cell"><div class="label">Background</div><div class="val">Solo developer / "vibe coder" — builds with AI coding agents. Already shipped Invoice Rescue's core app (Next.js 16, Firebase, Gemini AI) plus two AI video pipelines.</div></div>
+      <div class="about-cell"><div class="label">Starting capital</div><div class="val">Under £300. The Cloudflare base built alongside this plan runs on the free tier — £0/month — so the budget goes entirely to outreach.</div></div>
+      <div class="about-cell"><div class="label">Income goal</div><div class="val">£20,000+/month. Realistic destination: month 9–12. The 90-day target is the first 2–3 paying clients — the ladder to £20K is in the execution plan below.</div></div>
+      <div class="about-cell"><div class="label">Personal brand</div><div class="val">Face: yes. Live spoken English: not yet confident. Every channel below is written-first or asynchronous by design — this is a feature of the plan, not a workaround bolted on.</div></div>
+    </div>
+  </section>
+
+  <!-- PART 1 -->
+  <section>
+    <div class="part-title">Part 1 of 3</div>
+    <span class="part-tag">The Offer</span>
+    <h2>What you sell, who you sell it to, what it costs</h2>
+
+    <div class="kv">
+      <dt>ICP</dt>
+      <dd>UK service businesses invoicing on 30-day terms — agencies, consultancies, trades subcontractors. 5–30 staff, £250K–£3M turnover, no dedicated credit controller. Buyer: the owner or MD. Findable today: LinkedIn filtered on "Managing Director" + company size 11–50 + UK.</dd>
+      <dt>Buying signal</dt>
+      <dd>Publicly complaining about late payers, recently hired a bookkeeper (signals they're at the "getting serious about finance" stage but haven't solved collections), or operating in construction — the UK's worst sector for payment delay.</dd>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:28px">The pain, in their own words</h3>
+    <div class="quote">"I remember suffering in silence when clients took many months to pay because I didn't want to sour the relationship and jeopardise future business."<cite>— Harry Pill, Fresh Cut Video (video production agency, Oxford), via British Business Bank</cite></div>
+    <div class="quote">"It seems to be getting worse and worse lately. Out of ten invoices we issued in May, only two were paid on time."<cite>— small business owner, UK Business Forums thread on late-paying clients</cite></div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:28px">The deliverable</h3>
+    <p style="color:var(--muted)">Hybrid framing — output you can point to, tied to the outcome they actually want:</p>
+    <div class="quote" style="font-size:16px">Every overdue invoice chased within 24 hours of falling due, with escalating sequences sent in the client's own name — designed to get invoices paid 2–3 weeks sooner — plus a Friday cash report showing exactly what's been paid, promised, and escalating next.</div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:28px">The AI workflow — 5 steps, 80%+ AI-delivered</h3>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><div><h4>Connect</h4><p>Client connects Xero/QuickBooks or sends a CSV. Onboarding takes under a day.</p></div></div>
+      <div class="step"><div class="n">02</div><div><h4>Detect</h4><p>The system flags every invoice as it crosses due date — no manual review needed to spot what's overdue.</p></div></div>
+      <div class="step"><div class="n">03</div><div><h4>Draft</h4><p>AI drafts the next message in the escalation sequence — reminder, firm follow-up, or formal notice with statutory interest calculated — tone-matched to the client's brand.</p></div></div>
+      <div class="step"><div class="n">04</div><div><h4>Review &amp; send</h4><p>You review each draft (roughly 5 minutes per client per day at steady state) and send in the client's name.</p></div></div>
+      <div class="step"><div class="n">05</div><div><h4>Report</h4><p>An auto-generated Friday report goes to every client: paid, promised, escalating.</p></div></div>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:30px">Pricing — three tiers, anchored to real UK market data</h3>
+    <div class="tier-row">
+      <div class="tier"><div class="name">Foundation</div><div class="price">£349</div><div class="per">per month · no long contract</div></div>
+      <div class="tier hi"><div class="name">Engine<span class="badge">Start here</span></div><div class="price">£649</div><div class="per">per month · 3-month minimum</div></div>
+      <div class="tier"><div class="name">Operator</div><div class="price">£1,250</div><div class="per">per month · 3-month minimum</div></div>
+    </div>
+    <p style="color:var(--faint);font-size:13.5px">Anchor: outsourced credit control in the UK runs from roughly £100/month (2-hour minimum at £50+VAT/hour) up to ~0.75% of turnover for a full service; an in-house credit controller costs £22,000–£30,000 a year. Engine at £649/month sits far under both while still reading as a serious, professional service.</p>
+
+    <div class="offer-line">"I help UK agencies and trades businesses get overdue invoices paid 2–3 weeks faster — every invoice chased with professional, escalating sequences in their own name, AI-drafted and human-checked — from £349 a month."</div>
+  </section>
+
+  <!-- PART 2 -->
+  <section>
+    <div class="part-title">Part 2 of 3</div>
+    <span class="part-tag">Lead Generation</span>
+    <h2>Where your buyers are, and how you reach them without live speaking</h2>
+
+    <h3 style="font-size:16px;font-weight:600">Primary platform: LinkedIn</h3>
+    <p style="color:var(--muted);max-width:60ch">LinkedIn is a writing platform, which is exactly why it's the right choice here — content is drafted, edited, and posted with zero live speech. Your ICP (agency owners, MDs) are the platform's core B2B audience, and specialist fractional-finance and cash-flow accounts already draw serious engagement there, confirming buyer attention exists in this exact content category.</p>
+
+    <div class="kv">
+      <dt>Content approach</dt>
+      <dd>I draft every post; you review and edit for voice. Photos, not talking-head video, on profile and landing page. If video ever helps, script it and render through your existing ElevenLabs/Creatomate pipeline with captions — the same asset that runs your other project.</dd>
+      <dt>Outbound channel 1</dt>
+      <dd><b>LinkedIn DM outreach</b> — written, asynchronous, directly searchable ICP by job title + company size. 20–40 connection requests/day, 50–80 DMs/day with care once warmed up.</dd>
+      <dt>Outbound channel 2</dt>
+      <dd><b>Cold email</b> — fully written, zero speaking required anywhere in the funnel. 2–4 week warmup: start at 10/day, scale to 50–100 over 3 weeks.</dd>
+      <dt>Weeks 1–4 only</dt>
+      <dd><b>PeoplePerHour / Upwork listing</b> — fastest route to a first paying client while LinkedIn and email warm up. Real market comparison: PeoplePerHour credit-control freelancers currently list packaged offers from $25/hour up to $525 for "full credit control & collections, 100 accounts max" — your AI-assisted delivery lets you undercut on effort while pricing above that floor once you have one case study.</dd>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:26px">Sales calls — the one place speaking still shows up</h3>
+    <p style="color:var(--muted);max-width:60ch">Kept deliberately light. A short discovery call framework (fixed questions, I help you rehearse), backed by a written proposal and a captioned Loom walkthrough of the sample chase sequence — the sample carries more of the close than the call does.</p>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:26px">Realistic activity targets</h3>
+    <div class="tbl-wrap"><table>
+      <tr><th>Channel</th><th class="num">Daily</th><th class="num">Weekly</th></tr>
+      <tr><td>LinkedIn DMs</td><td class="num">20–40</td><td class="num">100–200</td></tr>
+      <tr><td>Cold email (post-warmup)</td><td class="num">30–50</td><td class="num">150–250</td></tr>
+      <tr><td>Expected replies (5–8%)</td><td class="num">2–6</td><td class="num">12–30</td></tr>
+      <tr><td>Calls booked</td><td class="num">—</td><td class="num">3–6</td></tr>
+      <tr><td>Proposals sent</td><td class="num">—</td><td class="num">1–2</td></tr>
+    </table></div>
+  </section>
+
+  <!-- PART 3 -->
+  <section>
+    <div class="part-title">Part 3 of 3</div>
+    <span class="part-tag">Monetization</span>
+    <h2>How money actually flows in</h2>
+
+    <h3 style="font-size:16px;font-weight:600">Sales process</h3>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div><h4>Lead enters</h4><p>Via LinkedIn DM, cold email reply, or the invoicerescue.co.uk landing page (already built and deployable).</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Discovery call</h4><p>30 minutes, fixed question framework, rehearsed in advance.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Sample + written proposal</h4><p>A real sample chase sequence in their brand voice, sent before or alongside the proposal — this is the actual close.</p></div></div>
+      <div class="step"><div class="n">4</div><div><h4>Follow-up</h4><p>3 touches over 14 days, written.</p></div></div>
+      <div class="step"><div class="n">5</div><div><h4>Close</h4><p>Signed agreement, 50% deposit, month 1 paid in advance.</p></div></div>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:26px">Pricing structure</h3>
+    <p style="color:var(--muted)">3-month minimum on Engine and Operator. 50% deposit on signature, 50% on month-1 delivery. Quarterly renewal with an optional 10–15% increase at renewal #2, once a track record exists.</p>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:26px">Upsell path — 12-month lifetime value</h3>
+    <div class="kv">
+      <dt>Months 1–3</dt><dd>Foundation or Engine — core chasing service.</dd>
+      <dt>Months 4–6</dt><dd>Upgrade to Operator, or add the AI Systems Builder offer (custom automation for their finance stack — your third business model, sold as an add-on once trust exists).</dd>
+      <dt>Months 7–12</dt><dd>Renewal at a 10–15% increase; a client at Engine → Operator by month 12 is worth roughly £9,600–£12,600 in that first year alone.</dd>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin-top:26px">Revenue math — honest, not aspirational</h3>
+    <div class="tbl-wrap"><table>
+      <tr><th>Goal</th><th>Clients needed</th><th>Realistic timeline</th></tr>
+      <tr><td>First £349</td><td class="num">1 signed (Foundation)</td><td class="num">30–45 days</td></tr>
+      <tr><td>£1,300/mo</td><td class="num">2 Engine clients</td><td class="num">45–75 days</td></tr>
+      <tr><td>£5,000/mo</td><td class="num">~8 Engine clients</td><td class="num">4–5 months</td></tr>
+      <tr><td>£10,000/mo</td><td class="num">~15 Engine clients</td><td class="num">6–8 months</td></tr>
+      <tr><td>£20,000+/mo</td><td class="num">~30 Engine (or 16 Operator)</td><td class="num">9–12 months</td></tr>
+    </table></div>
+    <p style="color:var(--faint);font-size:13.5px">Cold outbound close rate for a first-time seller with no existing brand: roughly 0.3–0.5%, not the 1%+ often assumed. This table uses that honest number, not an optimistic one — and it still gets you to a real business.</p>
+  </section>
+
+  <!-- MARKET RESEARCH -->
+  <section>
+    <span class="eyebrow">Market research findings</span>
+    <h2>What real UK data says about this market</h2>
+
+    <div class="finding">
+      <div class="fnum">FINDING 01</div>
+      <h3>Named competitors, sorted into four tiers</h3>
+      <div class="tbl-wrap"><table>
+        <tr><th>Tier</th><th>Who</th><th>Pricing</th></tr>
+        <tr><td>1 · Traditional agencies</td><td>Chaser, My Credit Controllers, STA International, Price Bailey, NPD &amp; Co</td><td class="num">£100–£560+/mo, or ~0.75% of turnover</td></tr>
+        <tr><td>2 · Marketplaces</td><td>PeoplePerHour, Upwork freelance credit controllers</td><td class="num">$25–$525 per package</td></tr>
+        <tr><td>3 · Self-serve SaaS</td><td>Chaser software, WorksBuddy/INZO, Xero &amp; QuickBooks built-in reminders</td><td class="num">$0–$199/mo</td></tr>
+        <tr><td>4 · Solo AI operators</td><td><i>Your lane — no direct named competitor found</i></td><td class="num">£349–£1,250/mo</td></tr>
+      </table></div>
+    </div>
+
+    <div class="finding">
+      <div class="fnum">FINDING 02</div>
+      <h3>Real pricing range</h3>
+      <p style="color:var(--muted)">Low end: £100/month (2-hour minimum at £50+VAT/hour, per Confident Cashflow). Median: roughly £400–£650/month for a small-ledger service. High end: ~0.75% of turnover for a full outsourced function (FundInvoice), or £22,000–£30,000/year for an in-house hire (Chaser, Accounts and Legal). Your Engine tier at £649/month sits comfortably mid-market against real quotes, not invented ones.</p>
+    </div>
+
+    <div class="finding">
+      <div class="fnum">FINDING 03</div>
+      <h3>Target brands and the buyer signal that matters most</h3>
+      <p style="color:var(--muted)">The clearest buyer signal isn't a company database — it's the news. On 19 May 2026 the UK government introduced the <b>Commercial Payments Bill</b> in the House of Lords: mandatory statutory interest, a proposed 60-day payment cap, and new Small Business Commissioner enforcement powers. Construction has the worst payment record in the UK (avg. 61 days against 30-day terms) — a strong first vertical. Named example targets: video/creative production agencies (the Fresh Cut Video pattern), small trades subcontractors, and boutique consultancies under £3M turnover.</p>
+    </div>
+
+    <div class="finding">
+      <div class="fnum">FINDING 04</div>
+      <h3>AI delivery stack</h3>
+      <div class="kv">
+        <dt>Delivery core</dt><dd>Your existing app (Next.js 16, Firebase, Gemini AI) + the new Cloudflare Worker/D1 base built alongside this plan. £0/month on free tier.</dd>
+        <dt>Draft engine</dt><dd>Claude for chase-sequence drafting and tone-matching — this conversation is a working example of the pattern.</dd>
+        <dt>Data source</dt><dd>Xero/QuickBooks API, or CSV for clients not yet on cloud accounting.</dd>
+        <dt>Sales support</dt><dd>Loom (free tier) for captioned walkthroughs; no paid outreach software needed at this scale — LinkedIn and email natively support the required volume.</dd>
+      </div>
+      <p style="color:var(--muted);margin-top:10px">Notable finding: nearly every "AI invoice automation" product on the market in 2026 automates the <i>paying</i> side (accounts payable) — extracting and processing invoices you owe. Almost none automate the <i>collecting</i> side for small businesses. That asymmetry is structural, not incidental — it's the gap.</p>
+    </div>
+
+    <div class="finding">
+      <div class="fnum">FINDING 05</div>
+      <h3>The gap — where you win</h3>
+      <p style="color:var(--muted)">Three forces line up: (1) a proven, quantified problem — 86 hours/year and £17K–£22K per business in unpaid invoices, per the Small Business Commissioner; (2) a regulatory tailwind pushing the topic into founder conversations right now via the Commercial Payments Bill; (3) an empty middle tier — Tier 1 agencies are priced for larger ledgers, Tier 2 marketplace freelancers have no software layer or consistency, and Tier 3 SaaS tools require the business owner to still do the chasing themselves. A single AI-assisted operator, personally branded, sitting between marketplace-cheap and agency-expensive, with software already built, is the open lane.</p>
+    </div>
+  </section>
+
+  <!-- EXECUTION PLAN -->
+  <section style="border-bottom:none">
+    <span class="eyebrow">30-day execution plan</span>
+    <h2>Week by week, then days 31–90</h2>
+
+    <div class="week">
+      <div class="wk">Week 1 · Foundation</div>
+      <h4>Deploy the base, build the first list, get one sample ready</h4>
+      <ul>
+        <li>Deploy the Cloudflare Worker (README has the exact 3-minute steps) and attach invoicerescue.co.uk</li>
+        <li>Build a 100–150 prospect list on LinkedIn: MD/owner + UK + company size 11–50, prioritising construction and creative agencies</li>
+        <li>Generate 2–3 sample chase-sequence emails in different brand voices for the portfolio</li>
+        <li>List the Foundation package on PeoplePerHour and/or Upwork</li>
+        <li>Write outbound templates (I'll draft these with you); begin first 20–30 LinkedIn connection requests</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="wk">Week 2 · Scale outbound</div>
+      <h4>100–150 LinkedIn touches, email warmup starts</h4>
+      <ul>
+        <li>20–30 LinkedIn DMs/day</li>
+        <li>Start cold email warmup at 10/day</li>
+        <li>2–3 LinkedIn posts: a contrarian take on late payment, a sample reveal, a behind-the-build post</li>
+        <li>Goal: 5–15 replies, 1–2 discovery calls booked</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="wk">Week 3 · First discovery calls</div>
+      <h4>2–4 calls held, samples and proposals go out</h4>
+      <ul>
+        <li>Hold 2–4 discovery calls using the rehearsed framework</li>
+        <li>Send a tailored sample + written proposal to every interested prospect</li>
+        <li>Email volume scaling toward 30/day as warmup completes</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="wk">Week 4 · Iterate and push for close</div>
+      <h4>Follow up, refine, close what's ready</h4>
+      <ul>
+        <li>3-touch follow-up sequence on every outstanding proposal</li>
+        <li>Refine the pitch from whatever objections came up</li>
+        <li>If a client closes: collect the deposit, onboard within 48 hours, deliver a visible "week-1 win" (first chase sent, first payment landed)</li>
+        <li>If not yet closed: still on pace — this is the normal shape of month one</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="wk">Days 31–90 · First client, then second</div>
+      <h4>The ladder to a real recurring business</h4>
+      <ul>
+        <li>Continue outbound rhythm: 50–80/day, 250–400/week combined LinkedIn + email</li>
+        <li>First close expected: days 45–75</li>
+        <li>Document the win as a case study (with permission) — this is what 5–10x's the close rate on client #2</li>
+        <li>Second close expected: days 75–120</li>
+        <li>At 2 Engine clients, you're at £1,300/mo recurring — proof the model works, and the foundation for the climb to £5K, £10K, and £20K/mo mapped in the revenue table above</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Invoice Rescue · invoicerescue.co.uk · Blueprint prepared 15 July 2026 using live UK market research.
+    Sources include the Small Business Commissioner, GOV.UK, FSB, British Business Bank, FundInvoice, Chaser,
+    PeoplePerHour, and UK Business Forums. Figures reflect market conditions at time of research and should
+    be revisited as the Commercial Payments Bill progresses through Parliament.
+  </footer>
+
+</div>
+</body>
+</html>

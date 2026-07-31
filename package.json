@@ -1,0 +1,30 @@
+{
+  "name": "invoice-rescue",
+  "version": "1.0.0",
+  "description": "AI-assisted credit-control service for UK service businesses — every overdue invoice chased in the client's name, escalating and professional, until it's paid. 12%-success-fee model retired; current pricing is subscription tiers (see [docs/business-plan.html](docs/business-plan.html)): Foundation £349/mo, Engine £649/mo, Operator £1,250/mo.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mcgyver-ai/invoice-rescue-landing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Mcgyver-ai/invoice-rescue-landing/issues"
+  },
+  "homepage": "https://github.com/Mcgyver-ai/invoice-rescue-landing#readme",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260716.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.111.0"
+  }
+}
