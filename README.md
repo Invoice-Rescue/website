@@ -1,48 +1,181 @@
-# Invoice Rescue — Landing Site
+# Invoice Rescue
 
-Professional invoice recovery for UK freelancers and small businesses. 12% success fee, no win no fee.
+AI-assisted credit-control service for UK service businesses — every overdue invoice
+chased in the client's name, escalating and professional, until it's paid.
+12%-success-fee model retired; current pricing is subscription tiers (see
+[docs/business-plan.html](docs/business-plan.html)): Foundation £349/mo, Engine
+£649/mo, Operator £1,250/mo.
 
 **Live at:** [invoicerescue.co.uk](https://invoicerescue.co.uk)
 
-## Site Structure
+Runs entirely on Cloudflare's free tier: one Worker, one D1 database, zero
+external dependencies, zero monthly cost.
+
+## Project structure
 
 ```
-invoice-rescue-landing/
-├── index.html                  Home
-├── how-it-works/index.html     How It Works
-├── pricing/index.html          Pricing
-├── who-we-help/index.html      Who We Help
-├── about/index.html            About
-├── contact/index.html          Contact / Case Review Form
-├── style.css                   Shared stylesheet
-├── script.js                   Shared JavaScript
-├── sitemap.xml                 XML Sitemap
-├── robots.txt                  Robots.txt
-├── .gitignore                  Git ignore rules
-└── README.md                   This file
+invoice-rescue/
+├── frontend/              Static landing page — served directly by Cloudflare
+│   ├── index.html          as static assets, no Worker code runs for "/"
+│   ├── robots.txt
+│   └── sitemap.xml
+├── backend/                Cloudflare Worker — API only
+│   ├── src/
+│   │   ├── index.ts          Router + cron handlers (see routes below)
+│   │   └── lib/               csv.ts, statutory-interest.ts, escalation.ts,
+│   │                          gemini.ts, admin.ts
+│   ├── db/
+│   │   └── migrations/        D1 schema, tracked via `wrangler d1 migrations`
+│   │       ├── 0001_initial_schema.sql
+│   │       ├── 0002_credit_control.sql
+│   │       └── 0003_add_check_constraints.sql
+│   └── test/
+│       └── rest-api.sh       curl-based smoke test
+├── docs/
+│   ├── business-plan.html         The 1-Person AI Powered Business Plan
+│   └── credit-control-system-design.md   Design for the AI chasing engine —
+│                                          CSV/cron/draft/review/send/report
+│                                          built; Xero/QuickBooks OAuth sync
+│                                          still deliberately not built
+├── .agent/AGENTS.md         Local agent skill config
+├── wrangler.jsonc           Deploy config — main + assets in one Worker
+├── tsconfig.json            Type-checking only (wrangler doesn't need it to build)
+└── .gitignore
 ```
 
-## Deployment
+**Routes:**
 
-Static site hosted on **Cloudflare Pages**. No build step — plain HTML/CSS/JS.
+| Method | Path | What |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| POST | `/api/lead` | Landing-page free-audit form |
+| POST | `/api/clients` | Onboard a new client |
+| POST | `/api/clients/:id/invoices/import` | CSV invoice import |
+| GET | `/admin` | Chase-draft review queue — **not access-gated, see below** |
+| POST | `/api/chase/:id/approve` | Send an approved chase message |
+| POST | `/api/chase/:id/skip` | Skip a draft |
 
-All pages reference shared assets with root-absolute paths (`/style.css`, `/script.js`), and all internal navigation uses root-absolute links (`/pricing/`, `/contact/`, etc.) for correct resolution from any folder depth.
+Cron Triggers: `0 6 * * *` (detect-overdue, drafts next chase step via Gemini) and
+`0 8 * * FRI` (friday-report, cash summary per active client).
 
-## Contact Form
+**Why one Worker instead of Workers + Pages:** Cloudflare Workers can serve
+static assets and run Worker code from a single deployment (the `assets` key
+in `wrangler.jsonc`). Requests that match a file in `frontend/` are served
+directly with no Worker invocation; everything else (`/api/*`) runs
+`backend/src/index.ts`. One `wrangler deploy`, one URL, no Pages/Workers split
+to keep in sync.
 
-The contact page uses [Web3Forms](https://web3forms.com) for form submission (free, no backend required).
+## What already exists in your Cloudflare account (created 2026-07-15)
 
-**To activate the form:**
-1. Go to [web3forms.com](https://web3forms.com)
-2. Get a free access key
-3. Replace `YOUR_WEB3FORMS_ACCESS_KEY` in `contact/index.html` with your real key
+| Resource | Name | Detail |
+|---|---|---|
+| D1 database | `invoice-rescue-db` | id `b9e84ca4-bcd2-44e7-b4f2-d2dc61e1a29f`, region WEUR |
+| Schema | 4 tables + indexes | `leads`, `clients`, `invoices`, `chase_log` — tracked via `wrangler d1 migrations`, see CLAUDE.md |
 
-## Design System
+## Deploy (from your machine, ~3 minutes)
 
-- **Colours:** `--ink:#1C2128` `--slate:#2D3748` `--cloud:#F7F8FA` `--white:#FFFFFF` `--gold:#D4A853` `--gold-light:#F0C97A` `--muted:#6B7280` `--border:#E2E8F0`
-- **Display font:** Playfair Display (h1/h2)
-- **Body font:** Inter
-- **Signature element:** Ghost "£" watermark
+```bash
+# in this project folder
+npm install -D wrangler typescript @cloudflare/workers-types
+npx wrangler login            # opens browser, authorise your account
+npx wrangler types            # generates exact binding types (optional but recommended)
+npx wrangler deploy           # first deploy → gives you a workers.dev URL
+```
+
+Then attach the domain: Cloudflare dashboard → Workers & Pages → `invoice-rescue`
+→ Settings → Domains & Routes → add `invoicerescue.co.uk` and `www.invoicerescue.co.uk`.
+Because the domain is already on Cloudflare, this is one click, no DNS work.
+
+## Email notifications — one manual check
+
+The Worker emails you every new lead via Cloudflare Email Service (`NOTIFY` binding).
+Requirements (both should already be true on your account):
+
+1. Email Routing is enabled on `invoicerescue.co.uk` ✔ (your hello@ routing uses it)
+2. `tiborcc2@gmail.com` is a **verified destination address** ✔ (it receives your routed mail)
+
+If a lead email ever fails, the lead is still saved to D1 — notification is best-effort
+by design. Check: dashboard → Email → Email Routing → Destination addresses.
+
+## Test it
+
+Locally (recommended first — no live traffic, no real emails):
+
+```bash
+npx wrangler d1 migrations apply invoice-rescue-db --local
+echo 'GEMINI_API_KEY=your-key-here' > .dev.vars   # gitignored
+npx wrangler dev --port 8787
+# in another terminal:
+BASE_URL=http://127.0.0.1:8787 backend/test/rest-api.sh
+```
+
+`rest-api.sh` covers `/api/health` and `/api/lead`; it prints the manual `curl`
+walkthrough for the client/CSV/chase/cron routes (they need a seeded client
+first). Cron handlers can be fired manually in local dev:
+`curl "http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"`.
+
+Against the live deployment:
+
+```bash
+curl https://invoicerescue.co.uk/api/health
+
+curl -X POST https://invoicerescue.co.uk/api/lead \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"name":"Test Person","email":"test@example.com","company":"Test Ltd","overdue_band":"5k_25k","message":"hello","website":""}'
+
+npx wrangler d1 execute invoice-rescue-db --remote \
+  --command "SELECT id, name, email, company, overdue_band, status, created_at FROM leads ORDER BY id DESC LIMIT 10"
+```
+
+Expected: `{"ok":true}` from the POST, one row from the SELECT, and a notification
+email in your inbox with subject "New Invoice Rescue lead: Test Person — Test Ltd".
+
+## Spam protection
+
+- Honeypot field (`website`) silently drops bots.
+- For belt-and-braces, enable a free rate-limiting rule in the dashboard:
+  Security → WAF → Rate limiting rules → limit `POST /api/lead` to 5 requests/minute per IP.
+  Platform-native, zero code.
+
+## Design system
+
+- **Colours:** `--paper:#FBFAF7` `--ink:#171B21` `--muted:#5B6470` `--rule:#DDD9CE` `--red:#B23A2E` `--green:#1E7A4E` `--green-dark:#175F3D`
+- **Display font:** Fraunces (h1/h2)
+- **Body font:** IBM Plex Sans, IBM Plex Mono for numbers/labels
+- **Signature element:** the "aged receivables" ledger mockup in the hero
+
+## Honest status
+
+- **Verified by me:** D1 database created and schema applied (ran against your live
+  account); `send_email` binding config and plain-object `send()` API checked against
+  Cloudflare's current docs; the `assets` binding config checked against Cloudflare's
+  current static-assets docs.
+- **Not yet run:** the Worker itself — deploy needs your `wrangler login`.
+  The logic is simple and hand-traced, but treat the first deploy + curl test as the
+  real verification. If anything fails, paste the error to Claude.
+
+## Credit-control engine — built, not yet live-hardened
+
+CSV import, daily overdue detection, Gemini chase drafting, the `/admin`
+review queue, send-on-approve, and the Friday cash report are all implemented
+(see the routes table above) and verified end-to-end against local D1 + local
+`wrangler dev`. Before using this with a real client:
+
+1. **Put Cloudflare Access in front of `/admin`, `/api/chase/*`, and
+   `/api/clients`.** None of these have any auth today — anyone who finds the
+   URL can approve/send chase messages or create clients. This is a dashboard
+   config step, not code (§4.4 of the design doc).
+2. **Verify `BOE_BASE_RATE_PERCENT` in `wrangler.jsonc`** against the current
+   published Bank of England base rate before it drafts a message that states
+   statutory interest — it's a hardcoded var, not fetched automatically.
+3. **Confirm the escalation cadence** (`backend/src/lib/escalation.ts`,
+   currently a 7/14/21-day placeholder) matches what you actually want to send.
+4. **Set `GEMINI_API_KEY`** as a real secret before deploying:
+   `npx wrangler secret put GEMINI_API_KEY` (it currently reuses a key shared
+   with other projects in the vault — consider minting a dedicated one).
+
+Still deliberately not built: Xero/QuickBooks OAuth sync — CSV is the
+pragmatic first path until a client actually asks for live sync (§4.1, §6).
 
 ## Contact
 

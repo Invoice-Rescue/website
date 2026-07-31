@@ -1,0 +1,73 @@
+// wrangler.jsonc — Invoice Rescue
+// Layout: backend/src/index.ts is the Worker (API only), frontend/ is served
+// directly as static assets — Cloudflare serves frontend/index.html at "/"
+// automatically, without invoking the Worker. The Worker only ever runs for
+// requests that don't match a static file, i.e. everything under /api/*.
+{
+  "name": "invoice-rescue",
+  "main": "backend/src/index.ts",
+  "compatibility_date": "2026-07-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "assets": {
+    "directory": "./frontend",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "invoice-rescue-db",
+      // Real database — already created and migrated in your Cloudflare account (WEUR region)
+      "database_id": "b9e84ca4-bcd2-44e7-b4f2-d2dc61e1a29f",
+      // Migrations tracked via `wrangler d1 migrations` (see CLAUDE.md) instead
+      // of ad-hoc `wrangler d1 execute --file=...` runs.
+      "migrations_dir": "./backend/db/migrations"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "NOTIFY",
+      // Must be a VERIFIED Email Routing destination address on your account.
+      // This is your current routing destination for hello@invoicerescue.co.uk — change if needed.
+      "destination_address": "tiborcc2@gmail.com"
+    },
+    {
+      // No destination_address/allowed_destination_addresses — needed to send
+      // chase messages and client reports to arbitrary debtor/client
+      // addresses, not just your own inbox. See docs/credit-control-system-design.md §4.5.
+      "name": "SEND"
+    }
+  ],
+  "vars": {
+    "NOTIFY_TO": "tiborcc2@gmail.com",
+    "NOTIFY_FROM": "hello@invoicerescue.co.uk",
+    // Bank of England base rate, percent — used for statutory interest (Late
+    // Payment of Commercial Debts Act). Verify against the current published
+    // rate before relying on this for a real client invoice; it changes
+    // periodically and isn't fetched automatically. See backend/src/lib/statutory-interest.ts.
+    "BOE_BASE_RATE_PERCENT": "4.00",
+    // Test-mode publishable key — safe to expose client-side, not a secret.
+    // Invoice Rescue's own Stripe account (separate from any other business).
+    // Swap to the live publishable key only once real Stripe payment code
+    // exists here and you're ready to take live charges.
+    "STRIPE_PUBLISHABLE_KEY": "pk_test_51Tv4oWRc9HjdNS4PLbbcoyPRhWTZiZV7KtmyuOFxb1LFlzJNpKjiI6jUARVzXnEUg4TwiEdF9ysqeO6aIIkNDUaa00LWRBO984"
+  },
+  // GEMINI_API_KEY and STRIPE_SECRET_KEY are secrets, not vars — set with:
+  //   npx wrangler secret put GEMINI_API_KEY
+  //   npx wrangler secret put STRIPE_SECRET_KEY   (done 2026-07-20, test key)
+  // and for local dev, in a .dev.vars file (gitignored).
+  "triggers": {
+    "crons": [
+      "0 6 * * *", // detect-overdue: draft next chase step, daily 06:00 UTC
+      "0 8 * * FRI" // friday-report: cash summary per active client
+    ]
+  },
+  "routes": [
+    { "pattern": "invoicerescue.co.uk", "custom_domain": true },
+    { "pattern": "www.invoicerescue.co.uk", "custom_domain": true }
+  ]
+}
