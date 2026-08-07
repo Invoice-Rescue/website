@@ -4,11 +4,13 @@
  * Routes:
  *   GET  /api/health                          → health check
  *   POST /api/lead                            → validate + store lead in D1 + email notification
- *   POST /api/clients                          → onboard a new client (was raw D1 SQL before this route existed)
- *   POST /api/clients/:id/invoices/import      → CSV invoice import
- *   GET  /admin                                → chase-draft review queue (NOT access-gated — see below)
- *   POST /api/chase/:id/approve                → send an approved chase message
- *   POST /api/chase/:id/skip                    → mark a draft as skipped
+ *   POST /api/clients                          → onboard a new client (was raw D1 SQL before this route existed) [admin]
+ *   POST /api/clients/:id/invoices/import      → CSV invoice import [admin]
+ *   GET  /admin                                → chase-draft review queue [admin]
+ *   POST /api/chase/:id/approve                → send an approved chase message [admin]
+ *   POST /api/chase/:id/skip                    → mark a draft as skipped [admin]
+ *
+ * [admin] routes require HTTP Basic Auth — any username, password = ADMIN_SECRET.
  *
  * Cron Triggers (see wrangler.jsonc "triggers.crons"):
  *   06:00 UTC daily → detect-overdue: draft next chase step for overdue invoices
@@ -24,12 +26,16 @@
  *   SEND    — send_email binding, unrestricted destination (chase messages to debtors, client reports)
  * Secrets (wrangler secret put):
  *   GEMINI_API_KEY
+ *   ADMIN_SECRET — password half of the Basic Auth check on admin routes, see requireAdminAuth()
  * Vars:
  *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT
  *
- * IMPORTANT: /admin, /api/chase/*, and /api/clients have no auth in this Worker. Per
- * docs/credit-control-system-design.md §4.4, put Cloudflare Access in front
- * of all of them before using this with real client/debtor data.
+ * /admin, /api/chase/*, /api/clients, and the CSV import route are gated by
+ * requireAdminAuth() — a single shared secret (ADMIN_SECRET) checked via HTTP
+ * Basic Auth. This is a stopgap for the "I personally know every client"
+ * stage, not real auth: no per-user identity, no rotation, no audit log. Put
+ * Cloudflare Access in front of all of them before this scales past that
+ * (docs/credit-control-system-design.md §4.4).
  *
  * No external dependencies. ES modules format.
  */
@@ -54,6 +60,7 @@ interface Env {
   NOTIFY_FROM: string;
   BOE_BASE_RATE_PERCENT: string;
   GEMINI_API_KEY: string;
+  ADMIN_SECRET: string;
 }
 
 interface LeadInput {
@@ -88,6 +95,28 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
+// Cheap but effective at 1-2 clients: a single shared secret, not a real auth
+// system. HTTP Basic Auth (not Bearer) is deliberate — /admin is a
+// server-rendered HTML page with plain <form> POSTs, and a browser has no way
+// to attach a custom Authorization header to a form submission. Basic Auth is
+// the one scheme browsers natively prompt for and then re-send automatically
+// on every later request to the origin, so the review-queue forms keep
+// working after the first login. Swap this for something real (Cloudflare
+// Access, or actual sessions) once you're past the "I personally know every
+// client" stage — but ship THIS first, not nothing.
+function requireAdminAuth(request: Request, env: Env): Response | null {
+  const match = request.headers.get("Authorization")?.match(/^Basic (.+)$/);
+  const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(":") + 1) : null;
+
+  if (password === null || password !== env.ADMIN_SECRET) {
+    return new Response("Unauthorized", {
+      status: 401,
+      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+    });
+  }
+  return null; // null = passed, continue to the real handler
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -103,26 +132,26 @@ export default {
       }
 
       if (request.method === "POST" && path === "/api/clients") {
-        return await handleCreateClient(request, env);
+        return requireAdminAuth(request, env) ?? (await handleCreateClient(request, env));
       }
 
       const importMatch = path.match(/^\/api\/clients\/(\d+)\/invoices\/import$/);
       if (request.method === "POST" && importMatch) {
-        return await handleInvoiceImport(request, env, importMatch[1]);
+        return requireAdminAuth(request, env) ?? (await handleInvoiceImport(request, env, importMatch[1]));
       }
 
       if (request.method === "GET" && path === "/admin") {
-        return await handleAdminReviewQueue(env);
+        return requireAdminAuth(request, env) ?? (await handleAdminReviewQueue(env));
       }
 
       const approveMatch = path.match(/^\/api\/chase\/(\d+)\/approve$/);
       if (request.method === "POST" && approveMatch) {
-        return await handleChaseApprove(request, env, approveMatch[1]);
+        return requireAdminAuth(request, env) ?? (await handleChaseApprove(request, env, approveMatch[1]));
       }
 
       const skipMatch = path.match(/^\/api\/chase\/(\d+)\/skip$/);
       if (request.method === "POST" && skipMatch) {
-        return await handleChaseSkip(request, env, skipMatch[1]);
+        return requireAdminAuth(request, env) ?? (await handleChaseSkip(request, env, skipMatch[1]));
       }
 
       return new Response("Not found", { status: 404, headers: SECURITY_HEADERS });

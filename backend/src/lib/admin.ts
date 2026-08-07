@@ -34,7 +34,7 @@ export function renderReviewQueue(drafts: DraftRow[]): string {
 <style>body{font-family:system-ui,sans-serif;margin:2rem}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:.5rem;vertical-align:top;text-align:left}</style>
 </head><body>
 <h1>Review queue</h1>
-<p><strong>Not access-gated.</strong> Put Cloudflare Access in front of <code>/admin</code> (and <code>/api/chase/*</code>) before relying on this with real client data — see docs/credit-control-system-design.md §4.4.</p>
+<p><strong>Gated by a single shared secret (Basic Auth), not real auth.</strong> Put Cloudflare Access in front of <code>/admin</code> (and <code>/api/chase/*</code>) before relying on this past 1-2 clients — see docs/credit-control-system-design.md §4.4.</p>
 <table>
 <thead><tr><th>Client</th><th>Debtor</th><th>Invoice</th><th>Step</th><th>Message</th><th></th></tr></thead>
 <tbody>${rows || '<tr><td colspan="6">No drafts awaiting review.</td></tr>'}</tbody>
