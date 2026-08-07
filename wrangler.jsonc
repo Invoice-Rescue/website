@@ -56,9 +56,10 @@
     // exists here and you're ready to take live charges.
     "STRIPE_PUBLISHABLE_KEY": "pk_test_51Tv4oWRc9HjdNS4PLbbcoyPRhWTZiZV7KtmyuOFxb1LFlzJNpKjiI6jUARVzXnEUg4TwiEdF9ysqeO6aIIkNDUaa00LWRBO984"
   },
-  // GEMINI_API_KEY and STRIPE_SECRET_KEY are secrets, not vars — set with:
+  // GEMINI_API_KEY, STRIPE_SECRET_KEY, and ADMIN_SECRET are secrets, not vars — set with:
   //   npx wrangler secret put GEMINI_API_KEY
   //   npx wrangler secret put STRIPE_SECRET_KEY   (done 2026-07-20, test key)
+  //   npx wrangler secret put ADMIN_SECRET         (password half of the /admin Basic Auth check)
   // and for local dev, in a .dev.vars file (gitignored).
   "triggers": {
     "crons": [

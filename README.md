@@ -49,11 +49,11 @@ invoice-rescue/
 |---|---|---|
 | GET | `/api/health` | Health check |
 | POST | `/api/lead` | Landing-page free-audit form |
-| POST | `/api/clients` | Onboard a new client |
-| POST | `/api/clients/:id/invoices/import` | CSV invoice import |
-| GET | `/admin` | Chase-draft review queue — **not access-gated, see below** |
-| POST | `/api/chase/:id/approve` | Send an approved chase message |
-| POST | `/api/chase/:id/skip` | Skip a draft |
+| POST | `/api/clients` | Onboard a new client — **requires admin auth, see below** |
+| POST | `/api/clients/:id/invoices/import` | CSV invoice import — **requires admin auth** |
+| GET | `/admin` | Chase-draft review queue — **requires admin auth** |
+| POST | `/api/chase/:id/approve` | Send an approved chase message — **requires admin auth** |
+| POST | `/api/chase/:id/skip` | Skip a draft — **requires admin auth** |
 
 Cron Triggers: `0 6 * * *` (detect-overdue, drafts next chase step via Gemini) and
 `0 8 * * FRI` (friday-report, cash summary per active client).
@@ -103,15 +103,17 @@ Locally (recommended first — no live traffic, no real emails):
 
 ```bash
 npx wrangler d1 migrations apply invoice-rescue-db --local
-echo 'GEMINI_API_KEY=your-key-here' > .dev.vars   # gitignored
+printf 'GEMINI_API_KEY=your-key-here\nADMIN_SECRET=local-dev-secret\n' > .dev.vars   # gitignored
 npx wrangler dev --port 8787
 # in another terminal:
-BASE_URL=http://127.0.0.1:8787 backend/test/rest-api.sh
+BASE_URL=http://127.0.0.1:8787 ADMIN_SECRET=local-dev-secret backend/test/rest-api.sh
 ```
 
-`rest-api.sh` covers `/api/health` and `/api/lead`; it prints the manual `curl`
-walkthrough for the client/CSV/chase/cron routes (they need a seeded client
-first). Cron handlers can be fired manually in local dev:
+`rest-api.sh` covers `/api/health`, `/api/lead`, and `/api/clients`; it prints
+the manual `curl` walkthrough for the CSV/admin/chase/cron routes (they need a
+seeded client first). Admin routes need `-u admin:$ADMIN_SECRET` on every
+request (any username works, only the password is checked). Cron handlers can
+be fired manually in local dev:
 `curl "http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"`.
 
 Against the live deployment:
@@ -161,16 +163,21 @@ review queue, send-on-approve, and the Friday cash report are all implemented
 (see the routes table above) and verified end-to-end against local D1 + local
 `wrangler dev`. Before using this with a real client:
 
-1. **Put Cloudflare Access in front of `/admin`, `/api/chase/*`, and
-   `/api/clients`.** None of these have any auth today — anyone who finds the
-   URL can approve/send chase messages or create clients. This is a dashboard
-   config step, not code (§4.4 of the design doc).
-2. **Verify `BOE_BASE_RATE_PERCENT` in `wrangler.jsonc`** against the current
+1. **`/admin`, `/api/chase/*`, `/api/clients`, and the CSV import route are
+   gated behind a single shared secret** (`ADMIN_SECRET`, checked via HTTP
+   Basic Auth — see `requireAdminAuth()` in `backend/src/index.ts`). That's a
+   stopgap for the "I personally know every client" stage, not real auth: no
+   per-user identity, no rotation, no audit log. Put Cloudflare Access in
+   front of all four before this scales past that (§4.4 of the design doc).
+2. **Set `ADMIN_SECRET`** as a real secret before deploying:
+   `npx wrangler secret put ADMIN_SECRET`. Any username works at the browser's
+   Basic Auth prompt — only the password is checked.
+3. **Verify `BOE_BASE_RATE_PERCENT` in `wrangler.jsonc`** against the current
    published Bank of England base rate before it drafts a message that states
    statutory interest — it's a hardcoded var, not fetched automatically.
-3. **Confirm the escalation cadence** (`backend/src/lib/escalation.ts`,
+4. **Confirm the escalation cadence** (`backend/src/lib/escalation.ts`,
    currently a 7/14/21-day placeholder) matches what you actually want to send.
-4. **Set `GEMINI_API_KEY`** as a real secret before deploying:
+5. **Set `GEMINI_API_KEY`** as a real secret before deploying:
    `npx wrangler secret put GEMINI_API_KEY` (it currently reuses a key shared
    with other projects in the vault — consider minting a dedicated one).
 

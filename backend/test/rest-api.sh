@@ -5,6 +5,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8787}"
+ADMIN_SECRET="${ADMIN_SECRET:?Set ADMIN_SECRET to the value in your .dev.vars before running this script}"
 pass=0
 fail=0
 
@@ -38,25 +39,31 @@ res=$(curl -s -X POST "$BASE_URL/api/lead" -H "Content-Type: application/json" -
   -d '{"name":"Bot","email":"bot@example.com","overdue_band":"not_sure","website":"http://spam.example"}')
 check "honeypot pretends success" '"ok":true' "$res"
 
+echo "== /api/clients (no auth) =="
+res=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"company_name":"Acme Ltd","contact_email":"jane@acme.test","plan":"engine","accounting_source":"csv"}')
+check "client rejects missing auth" "401" "$res"
+
 echo "== /api/clients =="
-res=$(curl -s -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
+res=$(curl -s -u "admin:$ADMIN_SECRET" -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
   -d '{"company_name":"Acme Ltd","contact_email":"jane@acme.test","plan":"engine","accounting_source":"csv"}')
 check "client created" '"ok":true' "$res"
 
 echo "== /api/clients validation =="
-res=$(curl -s -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
+res=$(curl -s -u "admin:$ADMIN_SECRET" -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
   -d '{"company_name":"","contact_email":"not-an-email"}')
 check "client rejects bad input" '"ok":false' "$res"
 
 echo
 echo "NOTE: /api/clients/:id/invoices/import, /admin, /api/chase/:id/approve|skip,"
 echo "and the two cron handlers need invoices seeded on top of the client created above — see"
-echo "docs/credit-control-system-design.md and the manual walkthrough below."
+echo "docs/credit-control-system-design.md and the manual walkthrough below. Admin routes need"
+echo "-u admin:\$ADMIN_SECRET (any username works, only the password is checked)."
 echo
-echo "  curl -X POST $BASE_URL/api/clients/1/invoices/import --data-binary @invoices.csv"
+echo "  curl -u admin:\$ADMIN_SECRET -X POST $BASE_URL/api/clients/1/invoices/import --data-binary @invoices.csv"
 echo "  curl \"$BASE_URL/cdn-cgi/handler/scheduled?cron=0+6+*+*+*\"   # detect-overdue"
-echo "  curl $BASE_URL/admin"
-echo "  curl -X POST $BASE_URL/api/chase/1/approve -H 'Accept: application/json'"
+echo "  curl -u admin:\$ADMIN_SECRET $BASE_URL/admin"
+echo "  curl -u admin:\$ADMIN_SECRET -X POST $BASE_URL/api/chase/1/approve -H 'Accept: application/json'"
 echo "  curl \"$BASE_URL/cdn-cgi/handler/scheduled?cron=0+8+*+*+FRI\" # friday-report"
 
 echo
