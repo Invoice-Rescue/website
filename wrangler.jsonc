@@ -7,7 +7,9 @@
   "name": "invoice-rescue",
   "main": "backend/src/index.ts",
   "compatibility_date": "2026-07-15",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -15,7 +17,9 @@
   "assets": {
     "directory": "./frontend",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "d1_databases": [
     {
@@ -65,9 +69,5 @@
       "0 6 * * *", // detect-overdue: draft next chase step, daily 06:00 UTC
       "0 8 * * FRI" // friday-report: cash summary per active client
     ]
-  },
-  "routes": [
-    { "pattern": "invoicerescue.co.uk", "custom_domain": true },
-    { "pattern": "www.invoicerescue.co.uk", "custom_domain": true }
-  ]
+  }
 }
