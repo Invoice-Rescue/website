@@ -49,6 +49,9 @@
   "vars": {
     "NOTIFY_TO": "tiborcc2@gmail.com",
     "NOTIFY_FROM": "hello@invoicerescue.co.uk",
+    // Shown in the client portal as "reviewed and approved by {OPERATOR_NAME}" on every sent
+    // chase message — the human-review audit trail. Update if this stops being a one-person show.
+    "OPERATOR_NAME": "Tibor",
     // Bank of England base rate, percent — used for statutory interest (Late
     // Payment of Commercial Debts Act). Verify against the current published
     // rate before relying on this for a real client invoice; it changes
@@ -60,10 +63,14 @@
     // exists here and you're ready to take live charges.
     "STRIPE_PUBLISHABLE_KEY": "pk_test_51Tv4oWRc9HjdNS4PLbbcoyPRhWTZiZV7KtmyuOFxb1LFlzJNpKjiI6jUARVzXnEUg4TwiEdF9ysqeO6aIIkNDUaa00LWRBO984"
   },
-  // GEMINI_API_KEY, STRIPE_SECRET_KEY, and ADMIN_SECRET are secrets, not vars — set with:
+  // GEMINI_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, PORTAL_SESSION_SECRET, and
+  // ADMIN_SECRET are secrets, not vars — set with (see CLAUDE.md: the static
+  // CLOUDFLARE_API_TOKEN can't write secrets, this needs a `wrangler login` browser session):
   //   npx wrangler secret put GEMINI_API_KEY
-  //   npx wrangler secret put STRIPE_SECRET_KEY   (done 2026-07-20, test key)
-  //   npx wrangler secret put ADMIN_SECRET         (password half of the /admin Basic Auth check)
+  //   npx wrangler secret put STRIPE_SECRET_KEY       (done 2026-07-20, test key)
+  //   npx wrangler secret put STRIPE_WEBHOOK_SECRET   (from the Stripe Dashboard webhook endpoint config)
+  //   npx wrangler secret put PORTAL_SESSION_SECRET   (any long random string, e.g. openssl rand -hex 32)
+  //   npx wrangler secret put ADMIN_SECRET            (password half of the /admin Basic Auth check)
   // and for local dev, in a .dev.vars file (gitignored).
   "triggers": {
     "crons": [

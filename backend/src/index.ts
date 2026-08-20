@@ -2,15 +2,25 @@
  * Invoice Rescue — API Worker
  * ----------------------------------------------------
  * Routes:
- *   GET  /api/health                          → health check
+ *   GET  /api/health                          → health check (incl. D1 connectivity)
  *   POST /api/lead                            → validate + store lead in D1 + email notification
- *   POST /api/clients                          → onboard a new client (was raw D1 SQL before this route existed) [admin]
+ *   POST /api/clients                          → onboard a new client + best-effort Stripe customer [admin]
  *   POST /api/clients/:id/invoices/import      → CSV invoice import [admin]
  *   GET  /admin                                → chase-draft review queue [admin]
  *   POST /api/chase/:id/approve                → send an approved chase message [admin]
  *   POST /api/chase/:id/skip                    → mark a draft as skipped [admin]
+ *   POST /api/billing/webhook                  → Stripe webhook (subscription status → client status)
+ *   GET  /portal                               → client login form
+ *   POST /portal/login                         → email a 15-min magic link [client]
+ *   GET  /portal/verify                        → exchange magic link for a 7-day session cookie [client]
+ *   GET  /portal/dashboard                     → client's own invoices + chase history w/ review audit trail [client]
+ *   POST /portal/billing                       → redirect to Stripe-hosted billing portal [client]
+ *   POST /portal/logout                        → clear session cookie [client]
  *
  * [admin] routes require HTTP Basic Auth — any username, password = ADMIN_SECRET.
+ * [client] routes require a portal session cookie — see backend/src/lib/portal-auth.ts. No
+ * public signup: a client record is always created by the operator via POST /api/clients first;
+ * /portal/login only works for an email that already matches a clients.contact_email row.
  *
  * Cron Triggers (see wrangler.jsonc "triggers.crons"):
  *   06:00 UTC daily → detect-overdue: draft next chase step for overdue invoices
@@ -18,17 +28,20 @@
  *
  * The landing page itself is a static asset served directly from /frontend
  * (see wrangler.jsonc "assets" config) — this Worker only ever handles
- * requests that don't match a static file, i.e. everything under /api/* and /admin.
+ * requests that don't match a static file, i.e. everything under /api/*, /admin, /portal.
  *
  * Bindings (see wrangler.jsonc):
  *   DB      — D1 database "invoice-rescue-db"
  *   NOTIFY  — send_email binding restricted to the operator's own inbox (lead notifications, digests)
- *   SEND    — send_email binding, unrestricted destination (chase messages to debtors, client reports)
+ *   SEND    — send_email binding, unrestricted destination (chase messages, client reports, magic links)
  * Secrets (wrangler secret put):
  *   GEMINI_API_KEY
- *   ADMIN_SECRET — password half of the Basic Auth check on admin routes, see requireAdminAuth()
+ *   ADMIN_SECRET          — password half of the Basic Auth check on admin routes, see requireAdminAuth()
+ *   STRIPE_SECRET_KEY     — Stripe API key (test mode as of 2026-08; see CLAUDE.md before going live)
+ *   STRIPE_WEBHOOK_SECRET — signing secret for /api/billing/webhook, from the Stripe Dashboard webhook config
+ *   PORTAL_SESSION_SECRET — HMAC key for client portal magic-link + session tokens
  * Vars:
- *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT
+ *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT, OPERATOR_NAME, STRIPE_PUBLISHABLE_KEY
  *
  * /admin, /api/chase/*, /api/clients, and the CSV import route are gated by
  * requireAdminAuth() — a single shared secret (ADMIN_SECRET) checked via HTTP
@@ -37,7 +50,8 @@
  * Cloudflare Access in front of all of them before this scales past that
  * (docs/credit-control-system-design.md §4.4).
  *
- * No external dependencies. ES modules format.
+ * No external dependencies — the Stripe integration is plain fetch() calls
+ * (backend/src/lib/stripe.ts), not the stripe-node SDK. ES modules format.
  */
 
 import { parseCsv } from "./lib/csv";
@@ -45,6 +59,22 @@ import { fixedCompensationPence, statutoryInterestPence } from "./lib/statutory-
 import { nextStepDue, STEP_LABELS, type ChaseHistoryRow } from "./lib/escalation";
 import { buildChasePrompt, draftChaseMessage } from "./lib/gemini";
 import { renderReviewQueue, type DraftRow } from "./lib/admin";
+import {
+  signLoginToken,
+  verifyLoginToken,
+  buildSessionCookie,
+  clearSessionCookie,
+  authenticateClient,
+} from "./lib/portal-auth";
+import { createCustomer, createBillingPortalSession, verifyWebhookSignature } from "./lib/stripe";
+import {
+  renderPortalLogin,
+  renderPortalLoginSent,
+  renderPortalDashboard,
+  type PortalClientRow,
+  type PortalInvoiceRow,
+  type PortalChaseRow,
+} from "./lib/portal";
 
 /** Minimal interface for the send_email binding's plain-object API.
  * Run `npx wrangler types` to generate exact, up-to-date binding types. */
@@ -59,8 +89,12 @@ interface Env {
   NOTIFY_TO: string;
   NOTIFY_FROM: string;
   BOE_BASE_RATE_PERCENT: string;
+  OPERATOR_NAME: string;
   GEMINI_API_KEY: string;
   ADMIN_SECRET: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  PORTAL_SESSION_SECRET: string;
 }
 
 interface LeadInput {
@@ -124,7 +158,38 @@ export default {
 
     try {
       if (request.method === "GET" && path === "/api/health") {
-        return Response.json({ ok: true, service: "invoice-rescue" });
+        return await handleHealth(env);
+      }
+
+      if (request.method === "POST" && path === "/api/billing/webhook") {
+        return await handleBillingWebhook(request, env);
+      }
+
+      if (request.method === "GET" && path === "/portal") {
+        return await handlePortalLoginPage(request, env);
+      }
+
+      if (request.method === "POST" && path === "/portal/login") {
+        return await handlePortalLoginRequest(request, env);
+      }
+
+      if (request.method === "GET" && path === "/portal/verify") {
+        return await handlePortalVerify(request, env);
+      }
+
+      if (request.method === "POST" && path === "/portal/logout") {
+        return new Response(null, {
+          status: 303,
+          headers: { ...SECURITY_HEADERS, "Set-Cookie": clearSessionCookie(), Location: "/portal" },
+        });
+      }
+
+      if (request.method === "GET" && path === "/portal/dashboard") {
+        return await handlePortalDashboard(request, env);
+      }
+
+      if (request.method === "POST" && path === "/portal/billing") {
+        return await handlePortalBilling(request, env);
       }
 
       if (request.method === "POST" && path === "/api/lead") {
@@ -315,7 +380,24 @@ async function handleCreateClient(request: Request, env: Env): Promise<Response>
     )
     .run();
 
-  return Response.json({ ok: true, id: result.meta.last_row_id }, { status: 201, headers: SECURITY_HEADERS });
+  const clientId = result.meta.last_row_id;
+
+  // Best-effort: the client portal/billing needs a Stripe customer, but Stripe being briefly
+  // unreachable must not block onboarding — a missing stripe_customer_id just makes
+  // /portal/billing show "not set up yet" until this is retried (see CLAUDE.md known gaps).
+  try {
+    const stripeCustomerId = await createCustomer(env.STRIPE_SECRET_KEY, {
+      name: input.company_name,
+      email: input.contact_email,
+    });
+    if (stripeCustomerId) {
+      await env.DB.prepare(`UPDATE clients SET stripe_customer_id = ?2 WHERE id = ?1`).bind(clientId, stripeCustomerId).run();
+    }
+  } catch (err) {
+    console.error(`Stripe customer creation failed for client ${clientId}:`, err);
+  }
+
+  return Response.json({ ok: true, id: clientId }, { status: 201, headers: SECURITY_HEADERS });
 }
 
 /** CSV columns expected: debtor_name, debtor_email, invoice_number, amount, currency, issued_date, due_date.
@@ -424,9 +506,9 @@ async function handleChaseApprove(request: Request, env: Env, chaseIdParam: stri
   });
 
   await env.DB.prepare(
-    `UPDATE chase_log SET status = 'sent', body = ?2, outcome = 'sent', reviewed_at = datetime('now') WHERE id = ?1`,
+    `UPDATE chase_log SET status = 'sent', body = ?2, outcome = 'sent', reviewed_at = datetime('now'), reviewed_by = ?3 WHERE id = ?1`,
   )
-    .bind(chaseId, body)
+    .bind(chaseId, body, env.OPERATOR_NAME)
     .run();
 
   return adminActionResponse(request);
@@ -449,6 +531,174 @@ function adminActionResponse(request: Request): Response {
     return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
   }
   return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
+}
+
+async function handleHealth(env: Env): Promise<Response> {
+  try {
+    await env.DB.prepare("SELECT 1").first();
+  } catch (err) {
+    console.error("Health check: DB unreachable:", err);
+    return Response.json({ ok: false, service: "invoice-rescue", db: "unreachable" }, { status: 503, headers: SECURITY_HEADERS });
+  }
+  return Response.json({ ok: true, service: "invoice-rescue" }, { headers: SECURITY_HEADERS });
+}
+
+async function handlePortalLoginPage(request: Request, env: Env): Promise<Response> {
+  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId !== null) {
+    return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/portal/dashboard" } });
+  }
+  return new Response(renderPortalLogin(), { headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" } });
+}
+
+/** Emails a 15-minute magic link if the address matches a client. Always responds the same way,
+ * whether or not it matched, so this can't be used to enumerate client email addresses. */
+async function handlePortalLoginRequest(request: Request, env: Env): Promise<Response> {
+  const contentType = request.headers.get("Content-Type") ?? "";
+  let email = "";
+  if (contentType.includes("application/json")) {
+    const raw = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    email = typeof raw.email === "string" ? raw.email.trim() : "";
+  } else {
+    const form = await request.formData();
+    email = String(form.get("email") ?? "").trim();
+  }
+
+  const client = await env.DB.prepare(`SELECT id FROM clients WHERE contact_email = ?1`).bind(email).first<{ id: number }>();
+  if (client) {
+    const token = await signLoginToken(client.id, env.PORTAL_SESSION_SECRET);
+    const verifyUrl = `${new URL(request.url).origin}/portal/verify?token=${token}`;
+    try {
+      await env.SEND.send({
+        to: email,
+        from: env.NOTIFY_FROM,
+        subject: "Your Invoice Rescue login link",
+        text: `Click to log in to your Invoice Rescue dashboard (expires in 15 minutes):\n\n${verifyUrl}\n\nDidn't request this? You can ignore this email.`,
+      });
+    } catch (err) {
+      console.error("Portal login email failed:", err);
+    }
+  }
+
+  return new Response(renderPortalLoginSent(), { headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" } });
+}
+
+async function handlePortalVerify(request: Request, env: Env): Promise<Response> {
+  const token = new URL(request.url).searchParams.get("token") ?? "";
+  const clientId = await verifyLoginToken(token, env.PORTAL_SESSION_SECRET);
+  if (clientId === null) {
+    return new Response(renderPortalLogin("That link is invalid or has expired. Request a new one below."), {
+      status: 400,
+      headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
+  const cookie = await buildSessionCookie(clientId, env.PORTAL_SESSION_SECRET);
+  return new Response(null, {
+    status: 303,
+    headers: { ...SECURITY_HEADERS, "Set-Cookie": cookie, Location: "/portal/dashboard" },
+  });
+}
+
+async function handlePortalDashboard(request: Request, env: Env): Promise<Response> {
+  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId === null) {
+    return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/portal" } });
+  }
+
+  const client = await env.DB.prepare(`SELECT id, company_name, contact_name, stripe_customer_id FROM clients WHERE id = ?1`)
+    .bind(clientId)
+    .first<PortalClientRow>();
+  if (!client) {
+    return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/portal" } });
+  }
+
+  const invoices = await env.DB.prepare(
+    `SELECT invoice_number, debtor_name, amount_pence, currency, status, due_date
+     FROM invoices WHERE client_id = ?1 ORDER BY due_date DESC`,
+  )
+    .bind(clientId)
+    .all<PortalInvoiceRow>();
+
+  const chases = await env.DB.prepare(
+    `SELECT i.invoice_number, cl.step, cl.status, cl.sent_at, cl.reviewed_at, cl.reviewed_by
+     FROM chase_log cl JOIN invoices i ON i.id = cl.invoice_id
+     WHERE i.client_id = ?1 ORDER BY cl.sent_at DESC`,
+  )
+    .bind(clientId)
+    .all<PortalChaseRow>();
+
+  return new Response(renderPortalDashboard(client, invoices.results ?? [], chases.results ?? []), {
+    headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+async function handlePortalBilling(request: Request, env: Env): Promise<Response> {
+  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId === null) {
+    return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/portal" } });
+  }
+
+  const client = await env.DB.prepare(`SELECT stripe_customer_id FROM clients WHERE id = ?1`)
+    .bind(clientId)
+    .first<{ stripe_customer_id: string | null }>();
+
+  if (!client?.stripe_customer_id) {
+    return new Response(
+      `<!doctype html><html><body><p>Billing isn't set up on your account yet — email <a href="mailto:hello@invoicerescue.co.uk">hello@invoicerescue.co.uk</a>.</p><p><a href="/portal/dashboard">Back to dashboard</a></p></body></html>`,
+      { headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" } },
+    );
+  }
+
+  const returnUrl = `${new URL(request.url).origin}/portal/dashboard`;
+  const portalUrl = await createBillingPortalSession(env.STRIPE_SECRET_KEY, client.stripe_customer_id, returnUrl);
+  if (!portalUrl) {
+    return Response.json({ ok: false, error: "Couldn't reach Stripe. Try again shortly." }, { status: 502, headers: SECURITY_HEADERS });
+  }
+  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: portalUrl } });
+}
+
+/** Stripe webhook — keeps client.status in sync with subscription state. Not FCA/legal-advice-relevant;
+ * purely operational (see CLAUDE.md for the manual Stripe Dashboard setup this endpoint depends on). */
+async function handleBillingWebhook(request: Request, env: Env): Promise<Response> {
+  const rawBody = await request.text();
+  const valid = await verifyWebhookSignature(rawBody, request.headers.get("Stripe-Signature"), env.STRIPE_WEBHOOK_SECRET);
+  if (!valid) {
+    return Response.json({ ok: false, error: "Invalid signature." }, { status: 400, headers: SECURITY_HEADERS });
+  }
+
+  const event = JSON.parse(rawBody) as { type: string; data: { object: { customer: string; status?: string } } };
+  const customerId = event.data.object.customer;
+
+  if (event.type === "customer.subscription.deleted") {
+    await env.DB.prepare(`UPDATE clients SET status = 'churned' WHERE stripe_customer_id = ?1`).bind(customerId).run();
+  } else if (event.type === "customer.subscription.updated") {
+    const subStatus = event.data.object.status;
+    const newStatus =
+      subStatus === "active" || subStatus === "trialing"
+        ? "active"
+        : subStatus === "past_due" || subStatus === "unpaid" || subStatus === "incomplete_expired"
+          ? "paused"
+          : subStatus === "canceled"
+            ? "churned"
+            : null;
+    if (newStatus) {
+      await env.DB.prepare(`UPDATE clients SET status = ?2 WHERE stripe_customer_id = ?1`).bind(customerId, newStatus).run();
+    }
+  } else if (event.type === "invoice.payment_failed") {
+    try {
+      await env.NOTIFY.send({
+        to: env.NOTIFY_TO,
+        from: env.NOTIFY_FROM,
+        subject: "Invoice Rescue: a client payment failed",
+        text: `Stripe customer ${customerId} had a failed payment. Check the Stripe dashboard.`,
+      });
+    } catch (err) {
+      console.error("Payment-failure notification email failed:", err);
+    }
+  }
+
+  return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
 }
 
 interface OverdueInvoiceRow {
