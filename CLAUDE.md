@@ -1,4 +1,37 @@
-# CLAUDE.md — Invoice Rescue
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+npx wrangler dev --port 8787          # local dev server (needs .dev.vars — see below)
+npx tsc --noEmit                      # type-check (wrangler deploy doesn't need this, but it's the only build gate)
+npx wrangler deploy                   # deploy (bundles + uploads in one step, no separate build)
+npx wrangler types                    # regenerate worker-configuration.d.ts from wrangler.jsonc bindings
+
+# local dev secrets (gitignored, not in wrangler.jsonc)
+printf 'GEMINI_API_KEY=...\nADMIN_SECRET=local-dev-secret\nSTRIPE_SECRET_KEY=...\nSTRIPE_WEBHOOK_SECRET=...\nPORTAL_SESSION_SECRET=...\n' > .dev.vars
+
+# smoke test against a running dev server (or live deploy)
+BASE_URL=http://127.0.0.1:8787 ADMIN_SECRET=local-dev-secret STRIPE_WEBHOOK_SECRET=... backend/test/rest-api.sh
+
+# fire a cron trigger manually in local dev (0 6 * * * = detect-overdue, 0 8 * * FRI = friday-report)
+curl "http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"
+```
+
+There is no lint config and no unit test framework — `backend/test/rest-api.sh` (curl-based) is the only test, and `npx tsc --noEmit` is the only static check. Treat both as required before calling a backend change done.
+
+## Architecture
+
+One Cloudflare Worker + one D1 database, zero external runtime dependencies (Stripe is called via plain `fetch()`, not the `stripe-node` SDK). `wrangler.jsonc`'s `assets` config serves `frontend/` directly for any request that matches a static file; **only** requests that don't match a file — everything under `/api/*`, plus `/admin` and `/portal/*` — actually invoke `backend/src/index.ts`. There is no bundler/build step: `wrangler deploy` bundles and uploads in one command.
+
+- **`backend/src/index.ts`** — the entire router (a chain of `if (method && path)` checks in `fetch()`, no framework), plus the two cron handlers (`scheduled()`) and the inbound-email handler (`email()`). Its top-of-file comment block is the authoritative route table, binding list, and secrets list — read it before adding a route. Admin routes (`/admin`, `/api/clients`, `/api/clients/:id/invoices/import`, `/api/chase/:id/{approve,skip}`) are gated by `requireAdminAuth()` (HTTP Basic Auth, password = `ADMIN_SECRET`); portal routes (`/portal/dashboard`, `/portal/billing`) are gated by `authenticateClient()` reading a session cookie.
+- **`backend/src/lib/`** — one file per concern, imported into `index.ts`: `csv.ts` (CSV parsing for invoice import), `statutory-interest.ts` (Late Payment of Commercial Debts Act calculations), `escalation.ts` (chase cadence — `nextStepDue()` decides if/when the next chase step fires), `gemini.ts` (builds the chase-drafting prompt and calls Gemini), `admin.ts` (renders the `/admin` review-queue HTML), `portal.ts` (renders the client-facing `/portal/*` HTML), `portal-auth.ts` (magic-link + session tokens, HMAC-signed via Web Crypto — no JWT library), `stripe.ts` (plain-`fetch()` Stripe client).
+- **Two cron triggers** (`wrangler.jsonc` → `triggers.crons`): daily `detect-overdue` finds overdue invoices, computes the next escalation step per `escalation.ts`, and drafts a message via Gemini into `chase_log` as `status='draft'`; weekly `friday-report` emails each active client a cash summary. Nothing sends to a debtor automatically — every draft waits in `/admin` for a human to approve or skip (`chase_log.reviewed_by`/`reviewed_at` records who/when, and is surfaced back to the client in the portal as the audit trail).
+- **D1 schema** (`backend/db/migrations/*.sql`, applied in order): `leads` (landing-page form submissions) → `clients`, `invoices`, `chase_log` (the core credit-control tables, added in 0002) → CHECK constraints promoting app-level enums into the schema (0003) → `clients.stripe_customer_id` + portal session support (0004). See "Production D1 workflow" below for the migration workflow itself.
+- **Two `send_email` bindings**, deliberately split by trust level: `NOTIFY` can only send to the operator's own inbox (lead alerts, digests); `SEND` can send to arbitrary addresses (chase messages to debtors, client reports, magic links) — see `wrangler.jsonc` comments.
+- **`frontend/`** is a static site (landing page, `/terms`, `/privacy`) with no build step — it's served as-is by the `assets` binding.
 
 ## Production D1 workflow
 
