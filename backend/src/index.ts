@@ -3,6 +3,7 @@
  * ----------------------------------------------------
  * Routes:
  *   GET  /api/health                          → health check (incl. D1 connectivity)
+ *   GET  /api/statutory-rate                   → current BOE base rate, for the landing-page calculator
  *   POST /api/lead                            → validate + store lead in D1 + email notification
  *   POST /api/clients                          → onboard a new client + best-effort Stripe customer [admin]
  *   POST /api/clients/:id/invoices/import      → CSV invoice import [admin]
@@ -41,7 +42,14 @@
  *   STRIPE_WEBHOOK_SECRET — signing secret for /api/billing/webhook, from the Stripe Dashboard webhook config
  *   PORTAL_SESSION_SECRET — HMAC key for client portal magic-link + session tokens
  * Vars:
- *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT, OPERATOR_NAME, STRIPE_PUBLISHABLE_KEY
+ *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT, OPERATOR_NAME, STRIPE_PUBLISHABLE_KEY, INBOX_FORWARD_TO
+ *
+ * Inbound email (Email Routing → email() handler below): every address on invoicerescue.co.uk
+ * currently forwards straight to tibor@invoicerescue.co.uk via a Cloudflare Email Routing rule
+ * that bypasses this Worker entirely. The email() handler exists so that rule *can* be pointed
+ * at this Worker (Dashboard, or `wrangler email routing rules create`), at which point it just
+ * logs-and-forwards to the same address — no behavior change until you also want to do something
+ * with debtor/client replies (parse + store + surface in /admin, see routing.md's DO pattern).
  *
  * /admin, /api/chase/*, /api/clients, and the CSV import route are gated by
  * requireAdminAuth() — a single shared secret (ADMIN_SECRET) checked via HTTP
@@ -95,6 +103,7 @@ interface Env {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   PORTAL_SESSION_SECRET: string;
+  INBOX_FORWARD_TO: string;
 }
 
 interface LeadInput {
@@ -159,6 +168,13 @@ export default {
     try {
       if (request.method === "GET" && path === "/api/health") {
         return await handleHealth(env);
+      }
+
+      if (request.method === "GET" && path === "/api/statutory-rate") {
+        return Response.json(
+          { boeBaseRatePercent: Number(env.BOE_BASE_RATE_PERCENT) },
+          { headers: { ...SECURITY_HEADERS, "Cache-Control": "public, max-age=3600" } },
+        );
       }
 
       if (request.method === "POST" && path === "/api/billing/webhook") {
@@ -236,6 +252,13 @@ export default {
     } else if (event.cron === "0 8 * * FRI") {
       await runFridayReport(env);
     }
+  },
+
+  // ponytail: log-and-forward only. Upgrade to parse (postal-mime) + store once a debtor/client
+  // reply needs to show up in /admin rather than just landing in the operator's own inbox.
+  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
+    console.log(`Inbound email: ${message.from} -> ${message.to} (${message.headers.get("subject") ?? "no subject"})`);
+    await message.forward(env.INBOX_FORWARD_TO);
   },
 } satisfies ExportedHandler<Env>;
 

@@ -11,7 +11,7 @@
 <style>
   :root{
     --paper:#FBFAF7; --ink:#171B21; --muted:#5B6470; --rule:#DDD9CE;
-    --red:#B23A2E; --green:#1E7A4E; --green-dark:#175F3D; --card:#FFFFFF;
+    --red:#B23A2E; --accent:#C1620E; --accent-dark:#8A430A; --card:#FFFFFF;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
@@ -20,36 +20,36 @@
   .wrap{max-width:960px;margin:0 auto;padding:0 24px}
   header{padding:28px 0;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--rule)}
   .brand{font-family:Fraunces,serif;font-size:22px;font-weight:600;letter-spacing:-.01em}
-  .brand span{color:var(--green)}
-  header a.cta-small{font-size:14px;font-weight:600;color:var(--green-dark);text-decoration:none;border-bottom:2px solid var(--green)}
+  .brand span{color:var(--accent)}
+  header a.cta-small{font-size:14px;font-weight:600;color:var(--accent-dark);text-decoration:none;border-bottom:2px solid var(--accent)}
   .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
   .hero{padding:72px 0 40px}
   h1{font-family:Fraunces,serif;font-weight:600;font-size:clamp(34px,5.6vw,56px);line-height:1.08;letter-spacing:-.02em;margin:14px 0 18px;max-width:17ch}
   .hero p.sub{max-width:56ch;color:var(--muted);font-size:19px}
-  .cta{display:inline-block;margin-top:28px;background:var(--green);color:#fff;font-weight:600;padding:14px 26px;border-radius:6px;text-decoration:none;border:none;font-size:17px;cursor:pointer}
-  .cta:hover{background:var(--green-dark)}
+  .cta{display:inline-block;margin-top:28px;background:var(--accent);color:#fff;font-weight:600;padding:14px 26px;border-radius:6px;text-decoration:none;border:none;font-size:17px;cursor:pointer}
+  .cta:hover{background:var(--accent-dark)}
   /* Signature: the ledger */
   .ledger{margin:56px 0 8px;background:var(--card);border:1px solid var(--rule);border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(23,27,33,.05)}
   .ledger-head{display:flex;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
-  .row{display:grid;grid-template-columns:1fr auto auto;gap:18px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:15px}
+  .row{display:grid;grid-template-columns:1fr auto auto;gap:18px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:15px;font-variant-numeric:tabular-nums}
   .row:last-child{border-bottom:none}
   .row .who{font-family:"IBM Plex Sans",sans-serif}
   .amount{font-weight:500}
   .overdue{color:var(--red)}
-  .stamp{display:inline-block;transform:rotate(-4deg);border:2px solid var(--green);color:var(--green);font-weight:600;font-size:12px;letter-spacing:.12em;padding:2px 10px;border-radius:3px;text-transform:uppercase}
+  .stamp{display:inline-block;transform:rotate(-4deg);border:2px solid var(--accent);color:var(--accent);font-weight:600;font-size:12px;letter-spacing:.12em;padding:2px 10px;border-radius:3px;text-transform:uppercase}
   .ledger-note{font-size:14px;color:var(--muted);padding:4px 2px 0;font-style:italic}
   section{padding:64px 0;border-top:1px solid var(--rule)}
   h2{font-family:Fraunces,serif;font-weight:600;font-size:clamp(26px,3.6vw,34px);letter-spacing:-.015em;margin:10px 0 30px}
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
   .step h3{font-size:17px;font-weight:600;margin-bottom:8px}
   .step p{color:var(--muted);font-size:15.5px}
-  .step .k{font-family:"IBM Plex Mono",monospace;color:var(--green);font-size:13px;display:block;margin-bottom:10px}
+  .step .k{font-family:"IBM Plex Mono",monospace;color:var(--accent-dark);font-size:13px;display:block;margin-bottom:10px}
   .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
   .tier{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:26px 22px;display:flex;flex-direction:column}
-  .tier.popular{border-color:var(--green);box-shadow:0 2px 10px rgba(30,122,78,.12)}
+  .tier.popular{border-color:var(--accent);box-shadow:0 2px 10px rgba(193,98,14,.14)}
   .tier .name{font-weight:600}
-  .tier .badge{font-size:11px;font-family:"IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-left:8px}
-  .tier .price{font-family:"IBM Plex Mono",monospace;font-size:30px;font-weight:500;margin:12px 0 2px}
+  .tier .badge{font-size:11px;font-family:"IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-dark);margin-left:8px}
+  .tier .price{font-family:"IBM Plex Mono",monospace;font-size:30px;font-weight:500;margin:12px 0 2px;font-variant-numeric:tabular-nums}
   .tier .per{color:var(--muted);font-size:13px;margin-bottom:16px}
   .tier ul{list-style:none;font-size:14.5px;color:var(--muted);flex:1}
   .tier li{padding:6px 0;border-top:1px dashed var(--rule)}
@@ -57,17 +57,47 @@
   form{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:30px;max-width:640px}
   label{display:block;font-size:14px;font-weight:600;margin:16px 0 6px}
   input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--rule);border-radius:6px;font:inherit;font-size:15.5px;background:var(--paper)}
-  input:focus,select:focus,textarea:focus{outline:2px solid var(--green);outline-offset:1px;border-color:var(--green)}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
   .hp{position:absolute;left:-5000px;opacity:0;height:0;overflow:hidden}
   .form-msg{margin-top:14px;font-size:15px;display:none}
-  .form-msg.ok{display:block;color:var(--green-dark);font-weight:600}
+  .form-msg.ok{display:block;color:var(--accent-dark);font-weight:600}
   .form-msg.err{display:block;color:var(--red)}
   #thanks:target ~ * .form-msg.ok, .show-ok{display:block}
   footer{border-top:1px solid var(--rule);padding:32px 0 48px;font-size:13.5px;color:var(--muted)}
-  @media (max-width:760px){.steps,.tiers{grid-template-columns:1fr}.row{grid-template-columns:1fr auto}.row .stamp-cell{grid-column:1/-1}}
+
+  /* Statutory interest calculator */
+  .calc{margin-top:36px;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:26px 26px 22px;box-shadow:0 1px 2px rgba(23,27,33,.05)}
+  .calc-title{font-family:Fraunces,serif;font-weight:600;font-size:clamp(20px,2.6vw,25px);letter-spacing:-.01em;margin:8px 0 18px}
+  .calc-body{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .calc-field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+  .calc-input-wrap{display:flex;align-items:center;border:1px solid var(--rule);border-radius:6px;background:var(--paper);overflow:hidden}
+  .calc-input-wrap .calc-prefix{padding:0 0 0 12px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+  .calc-body input{width:100%;padding:11px 12px;border:1px solid var(--rule);border-radius:6px;font:inherit;font-size:17px;background:var(--paper);font-variant-numeric:tabular-nums}
+  .calc-input-wrap input{border:none;background:transparent;padding-left:6px}
+  .calc-input-wrap input:focus{outline:none}
+  .calc-body input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .calc-result{margin-top:18px;padding-top:18px;border-top:1px dashed var(--rule);min-height:34px}
+  .calc-helper{color:var(--muted);font-size:14.5px}
+  .calc-error{color:var(--red);font-size:14.5px;font-weight:600}
+  .calc-notdue{color:var(--muted);font-size:14.5px;font-style:italic}
+  .calc-total-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .calc-total-label{font-size:14px;color:var(--muted);font-weight:600}
+  .calc-total-figure{font-family:"IBM Plex Mono",monospace;font-size:clamp(28px,4.4vw,38px);font-weight:500;color:var(--accent-dark);font-variant-numeric:tabular-nums}
+  .calc-breakdown{margin-top:8px;display:flex;flex-direction:column;gap:3px;font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .calc-breakdown strong{color:var(--ink);font-weight:600}
+  .calc-cta-line{margin-top:16px;font-size:15px;max-width:52ch}
+  .calc-cta{margin-top:12px;padding:11px 20px;font-size:15px}
+
+  /* Motion: purposeful reveals only, opt-in via .js so content never depends on JS to be visible */
+  .js .reveal{opacity:0;transform:translateY(18px);transition:opacity .5s ease,transform .5s ease}
+  .js .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.js .reveal{opacity:1;transform:none;transition:none}}
+
+  @media (max-width:760px){.steps,.tiers{grid-template-columns:1fr}.row{grid-template-columns:1fr auto}.row .stamp-cell{grid-column:1/-1}.calc-body{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<script>document.documentElement.classList.add("js")</script>
 <div class="wrap">
   <header>
     <div class="brand">Invoice<span>Rescue</span></div>
@@ -82,7 +112,25 @@
     And you never have to send the awkward email again.</p>
     <a class="cta" href="#audit">Get your free late-payment audit</a>
 
-    <div class="ledger" role="img" aria-label="Example ledger showing overdue invoices being collected">
+    <div class="calc" id="calculator" aria-labelledby="calc-heading">
+      <span class="eyebrow">Live calculator · Late Payment of Commercial Debts Act 1998</span>
+      <h2 id="calc-heading" class="calc-title">What are you actually owed on a late invoice?</h2>
+      <div class="calc-body">
+        <div class="calc-field">
+          <label for="calc-amount">Invoice amount</label>
+          <div class="calc-input-wrap"><span class="calc-prefix">£</span><input type="number" id="calc-amount" inputmode="decimal" min="0" step="0.01" placeholder="5,000"></div>
+        </div>
+        <div class="calc-field">
+          <label for="calc-days">Days overdue</label>
+          <input type="number" id="calc-days" inputmode="numeric" min="0" step="1" placeholder="30">
+        </div>
+      </div>
+      <div class="calc-result" id="calc-result" aria-live="polite">
+        <p class="calc-helper">Enter an invoice amount and how many days it's overdue. This is real UK statute, not a demo.</p>
+      </div>
+    </div>
+
+    <div class="ledger reveal" role="img" aria-label="Example ledger showing overdue invoices being collected">
       <div class="ledger-head"><span>Aged receivables</span><span>Days overdue</span></div>
       <div class="row"><span class="who">Invoice #247 — Hartley &amp; Co</span><span class="amount overdue">£4,850</span><span class="overdue">43 days</span></div>
       <div class="row"><span class="who">Invoice #251 — Meridian Build</span><span class="amount overdue">£12,300</span><span class="overdue">31 days</span></div>
@@ -91,7 +139,7 @@
     <p class="ledger-note">Illustrative ledger. Late payment costs UK businesses an estimated £11&nbsp;billion a year — most of it recoverable with consistent, professional follow-up.</p>
   </div>
 
-  <section id="how">
+  <section id="how" class="reveal">
     <span class="eyebrow">How it works</span>
     <h2>Consistent chasing, without you lifting a finger</h2>
     <div class="steps">
@@ -101,7 +149,7 @@
     </div>
   </section>
 
-  <section id="pricing">
+  <section id="pricing" class="reveal">
     <span class="eyebrow">Pricing</span>
     <h2>Less than a day of a credit controller's salary</h2>
     <div class="tiers">
@@ -124,7 +172,7 @@
     <p class="tiers-note">An in-house credit controller costs £22,000–£30,000 a year. Invoice Rescue starts at £4,188.</p>
   </section>
 
-  <section id="audit">
+  <section id="audit" class="reveal">
     <span id="thanks"></span>
     <span class="eyebrow">Free audit · no obligation</span>
     <h2>See what you're owed — and what we'd do about it</h2>
@@ -158,7 +206,7 @@
   </section>
 
   <footer>
-    Invoice Rescue · Operated by Tibor Rames, United Kingdom · invoicerescue.co.uk · hello@invoicerescue.co.uk<br>
+    Invoice Rescue · Operated by Tibor Rames, 14 Cropthorne Close, Redditch, B98 7SJ, United Kingdom · invoicerescue.co.uk · hello@invoicerescue.co.uk<br>
     Chasing is conducted lawfully and courteously under UK late-payment legislation. We are a credit-control service, not a debt collection agency or a law firm.<br>
     <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/portal">Client login</a>
   </footer>
@@ -187,6 +235,108 @@
   });
   // Show success note after no-JS redirect.
   if (location.hash === "#thanks") document.getElementById("msg-ok").classList.add("show-ok");
+
+  // Scroll reveal — .reveal only hides content once .js is on <html> (set inline, top of body),
+  // so a no-JS visitor always sees full content; this just adds a fade-in for everyone else.
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const revealTargets = document.querySelectorAll(".reveal");
+  if (reduceMotion || !("IntersectionObserver" in window)) {
+    revealTargets.forEach((el) => el.classList.add("in"));
+  } else {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) { entry.target.classList.add("in"); io.unobserve(entry.target); }
+      });
+    }, { threshold: 0.15 });
+    revealTargets.forEach((el) => io.observe(el));
+  }
+
+  // Statutory late-payment calculator (Late Payment of Commercial Debts (Interest) Act 1998).
+  // Mirrors backend/src/lib/statutory-interest.ts — kept in sync by hand since this static
+  // site has no build step to share code with the Worker; the base rate itself is NOT
+  // duplicated here, it's fetched from /api/statutory-rate so wrangler.jsonc stays the
+  // single source of truth (see BOE_BASE_RATE_PERCENT).
+  (function () {
+    const STATUTORY_MARGIN_PERCENT = 8;
+    const amountEl = document.getElementById("calc-amount");
+    const daysEl = document.getElementById("calc-days");
+    const resultEl = document.getElementById("calc-result");
+    let baseRatePercent = null;
+    let rateError = false;
+
+    function fixedCompensationPence(amountPence) {
+      if (amountPence < 100000) return 4000;
+      if (amountPence < 1000000) return 7000;
+      return 10000;
+    }
+    function statutoryInterestPence(amountPence, daysOverdue, rate) {
+      const annualRatePercent = rate + STATUTORY_MARGIN_PERCENT;
+      return Math.round(((amountPence * annualRatePercent) / 100 / 365) * daysOverdue);
+    }
+    function formatGBP(pence) {
+      return "£" + (pence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function countUp(el, toPence) {
+      if (reduceMotion) { el.textContent = formatGBP(toPence); return; }
+      const start = performance.now();
+      const duration = 500;
+      function tick(now) {
+        const t = Math.min(1, (now - start) / duration);
+        el.textContent = formatGBP(Math.round(toPence * (1 - Math.pow(1 - t, 3))));
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function renderHelper() {
+      resultEl.innerHTML = '<p class="calc-helper">Enter an invoice amount and how many days it\'s overdue. This is real UK statute, not a demo.</p>';
+    }
+    function renderError(message) {
+      resultEl.innerHTML = '<p class="calc-error"></p>';
+      resultEl.querySelector(".calc-error").textContent = message;
+    }
+    function renderNotDue() {
+      resultEl.innerHTML = '<p class="calc-notdue">Not overdue yet — bookmark this page and come back the day it\'s late.</p>';
+    }
+    function renderRateUnavailable() {
+      resultEl.innerHTML = '<p class="calc-error">Couldn\'t load the current base rate — please try again in a moment.</p>';
+    }
+    function renderResult(amountPence, days, rate) {
+      const interest = statutoryInterestPence(amountPence, days, rate);
+      const compensation = fixedCompensationPence(amountPence);
+      resultEl.innerHTML =
+        '<div class="calc-total-row"><span class="calc-total-label">You\'re owed</span>' +
+        '<span class="calc-total-figure" id="calc-total-figure">£0.00</span></div>' +
+        '<div class="calc-breakdown">' +
+        "<span>Statutory interest (" + days + " days @ " + (rate + STATUTORY_MARGIN_PERCENT).toFixed(2) + "%): <strong>" + formatGBP(interest) + "</strong></span>" +
+        "<span>Fixed compensation: <strong>" + formatGBP(compensation) + "</strong></span>" +
+        "</div>" +
+        '<p class="calc-cta-line">This is what you\'re owed. We\'re the ones who make sure you actually collect it.</p>' +
+        '<a class="cta calc-cta" href="#audit">Get your free late-payment audit</a>';
+      countUp(document.getElementById("calc-total-figure"), interest + compensation);
+    }
+
+    function render() {
+      const amountRaw = amountEl.value.trim();
+      const daysRaw = daysEl.value.trim();
+      if (!amountRaw || !daysRaw) { renderHelper(); return; }
+      const amount = Number(amountRaw);
+      const days = Number(daysRaw);
+      if (!Number.isFinite(amount) || amount <= 0) { renderError("Enter a real invoice amount — more than £0."); return; }
+      if (!Number.isFinite(days) || days < 0) { renderError("Days overdue can't be negative."); return; }
+      if (days === 0) { renderNotDue(); return; }
+      if (rateError) { renderRateUnavailable(); return; }
+      if (baseRatePercent === null) { renderHelper(); return; }
+      renderResult(Math.round(amount * 100), days, baseRatePercent);
+    }
+
+    amountEl.addEventListener("input", render);
+    daysEl.addEventListener("input", render);
+    fetch("/api/statutory-rate")
+      .then((r) => r.json())
+      .then((d) => { baseRatePercent = d.boeBaseRatePercent; render(); })
+      .catch(() => { rateError = true; render(); });
+  })();
 </script>
 </body>
 </html>

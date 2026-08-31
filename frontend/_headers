@@ -1,0 +1,22 @@
+# Cloudflare Workers Static Assets auto-detects Content-Type from file extension
+# but doesn't attach a charset — so it ships "text/html" with no charset param.
+# Browsers that don't sniff the <meta charset> tag (and most non-browser
+# fetchers: link-preview bots, share-card unfurlers, some scrapers) fall back
+# to a legacy default and mangle every £ and — on the page. This forces the
+# charset explicitly so rendering isn't dependent on the client guessing right.
+# Ref: https://developers.cloudflare.com/workers/static-assets/headers/
+
+/
+  Content-Type: text/html; charset=utf-8
+
+/privacy/
+  Content-Type: text/html; charset=utf-8
+
+/privacy
+  Content-Type: text/html; charset=utf-8
+
+/terms/
+  Content-Type: text/html; charset=utf-8
+
+/terms
+  Content-Type: text/html; charset=utf-8
