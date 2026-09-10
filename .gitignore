@@ -8,10 +8,17 @@ node_modules/
 
 .agent/
 
+# IDE
+.vscode/
+
 # Ruflo local secrets and runtime data
 .env.local
 .env.*.local
 .claude-flow/data/
 .claude-flow/logs/
 .claude-flow/sessions/
+.claude-flow/policy/
+.claude-flow/daemon-state.json
+.claude-flow/harness-active-policy.json
 .swarm/
+

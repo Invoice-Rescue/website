@@ -22,9 +22,9 @@
   },
   "homepage": "https://github.com/Mcgyver-ai/invoice-rescue-landing#readme",
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260716.1",
+    "@cloudflare/workers-types": "^5.20260826.1",
     "@types/node": "^26.1.1",
     "typescript": "^7.0.2",
-    "wrangler": "^4.111.0"
+    "wrangler": "^4.126.0"
   }
 }
