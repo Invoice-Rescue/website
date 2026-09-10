@@ -63,6 +63,34 @@ I can't do step 2 for you — it requires your Cloudflare DNS dashboard, which i
 
 \-----
 
+\#\# 2A\\. The volume math — what it actually takes to hit £5K/£10K/£20K MRR
+
+*Added 2026-08-29, via the pd\-1\-person\-business skill's volume/subscription\-archetype framework — that skill just got updated (see request to skill\-creator this session) to handle low\-ticket recurring businesses like this one instead of assuming every 1\-person AI business is a 2\-3\-client premium retainer. This section runs the honest numbers so the MRR targets in this project's brief aren't just vibes.*
+
+\*\*Revenue math (clients needed = goal ÷ price):\*\*
+
+| Goal | Foundation (£349) | Engine (£649) | Operator (£1,250) |
+| :\- | :\-: | :\-: | :\-: |
+| £5K/mo | 14 clients | 8 clients | 4 clients |
+| £10K/mo | 29 clients | 15 clients | 8 clients |
+| £20K/mo | 57 clients | 31 clients | 16 clients |
+
+This matches the Engine/Operator math already in this project's brief (£5K≈8, £10K≈15, £20K≈30, or ~16 Operator) almost exactly — good, the target numbers were sound. What's new here is what it takes in outbound volume to actually get there.
+
+\*\*Outbound volume needed\*\* (at 0.3\%\-0.5\% cold\-to\-close — the realistic range for a first\-time seller with no existing brand, which is exactly where this business is right now: zero clients, zero outreach sent):
+
+| Clients needed | Outbound touches needed |
+| :\- | :\-: |
+| 8 (Engine, £5K/mo) | 1,600\-2,667 |
+| 15 (Engine, £10K/mo) | 3,000\-5,000 |
+| 31 (Engine, £20K/mo) | 6,200\-10,333 |
+
+\*\*The actual bottleneck, in one number:\*\* batch 1 is 90 companies (25 with a confirmed email). At 0.3\-0.5\% cold\-to\-close, that batch alone converts to roughly 0.3\-0.45 clients — statistically, zero. Batch 1 is about 3\-6\% of the outbound volume needed just for the first £5K/mo milestone (8 Engine clients), before even counting £10K or £20K. Free/manual research (Companies House + Clutch.co) is running at ~35\% clean\-email hit rate — meaning hitting the low end of the 1,600\-2,667 valid\-contact range needed for 8 clients means researching roughly 4,600\-7,600 companies by hand, at a pace that took multiple sessions to produce 90. Two honest options once deliverability is fixed: (1) keep researching free/manual in batches — fine if the goal is genuinely a slow\-build cash\-flow business, or (2) revisit the paid prospecting tool declined earlier (Vibe Prospecting, ~£29.90+/batch) or a proper B2B data provider, because free/manual research at the current pace doesn't scale to the volume this pricing model needs. Not a recommendation either way — just flagging that "build a bigger list" is doing more of the actual work in this plan than it looks like on the surface.
+
+\*\*One caveat on the conversion\-rate assumption:\*\* the 0.3\-0.5\% range comes from a "book a discovery call" funnel. Invoice Rescue's actual CTA is lower\-friction — "reply for a free audit," not a calendar link (see Outreach Email Profile) — which could convert differently in either direction. Treat the outbound\-volume numbers above as a planning estimate, not a forecast, and replace them with real numbers the moment the first batch goes out and gets real replies.
+
+\-----
+
 \#\# 3\\. New finding: a real compliance risk in the outreach plan
 
 I checked current UK PECR (Privacy and Electronic Communications Regulations) rules on cold email, and there's a distinction your outreach-profile.md doesn't currently account for:
