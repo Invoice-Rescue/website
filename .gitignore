@@ -21,4 +21,8 @@ node_modules/
 .claude-flow/daemon-state.json
 .claude-flow/harness-active-policy.json
 .swarm/
-
+# Backups & Temp files
+*.bak
+*.tmp
+*.tsbuildinfo
+.cache/

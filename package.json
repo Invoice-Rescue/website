@@ -7,6 +7,15 @@
     "doc": "docs"
   },
   "scripts": {
+    "build": "wrangler deploy --dry-run",
+    "typecheck": "tsc --noEmit",
+    "types": "wrangler types",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deps:check": "npm outdated",
+    "deps:update": "npm update && npm run typecheck && npm run build",
+    "deps:audit": "npm audit",
+    "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
