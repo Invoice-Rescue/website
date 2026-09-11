@@ -1,0 +1,22 @@
+# <type>(<scope>): <subject> (max 50 chars, imperative, no period)
+#
+# Types:
+#   feat     - A new feature
+#   fix      - A bug fix
+#   docs     - Documentation changes
+#   style    - Code style / formatting changes (no functional impact)
+#   refactor - Refactoring code without behavior change
+#   perf     - Performance improvements
+#   test     - Adding or updating tests
+#   chore    - Build, tooling, dependencies, or maintenance
+#   ci       - CI/CD configuration and workflow updates
+#
+# Common Scopes:
+#   backend, frontend, worker, db, escalation, stripe, auth, config, legal
+#
+# ----------------------------------------------------------------------
+# Why was this change made? (Explain problem/motivation, not just code):
+#
+# ----------------------------------------------------------------------
+# Footer (e.g. BREAKING CHANGE: <explanation>, Closes #<issue>):
+
