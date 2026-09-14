@@ -56,11 +56,11 @@ and request handling) in one file — splitting them is what makes the
 | --- | --- | --- |
 | `frontend/index.html` | The landing page markup + inline styles + form-submit script | Static asset — Cloudflare serves it with no Worker invocation, so it loads even if the Worker has a bug |
 | `frontend/robots.txt`, `frontend/sitemap.xml` | Crawler files | Must live inside the assets directory to actually be served at `/robots.txt` and `/sitemap.xml` |
-| `backend/src/index.ts` | Request handling for `/api/lead` and `/api/health` only | Everything that touches D1 or sends email is server-side logic — it has no reason to also own HTML rendering |
-| `backend/db/schema.sql` | D1 table definitions | Kept next to the Worker that's the only thing that talks to that database |
+| `backend/src/index.ts` | Request router for API, Admin Review Queue, Client Portal, Stripe webhooks, and Cron triggers | Server-side execution layer talking to D1, Gemini AI, Stripe, and Cloudflare Email Service |
+| `backend/db/migrations/` | Versioned D1 schema migrations (`0001` through `0004`) | Tracked via `wrangler d1 migrations` for reproducible local and remote database evolution |
 | `wrangler.jsonc` | Deploy config for both halves | Lives at the repo root because it's the one file that describes the whole deployment, not just one side of it |
 | `docs/architecture.md` | This file | Explains structure and decisions |
-| `docs/credit-control-system-design.md` | Design for the not-yet-built AI chasing engine | Forward-looking design, not a description of what exists today |
+| `docs/credit-control-system-design.md` | Credit-control engine system design | Architectural design for AI chasing, escalation, and accounting integration |
 | `docs/business-plan.html` | The underlying business plan | Reference material, not code — kept out of the repo root so it doesn't read as part of the application |
 
 ## Adding new work
