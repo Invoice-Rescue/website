@@ -159,18 +159,34 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "node -e \"const fs=require('fs'),p=require('path');const d=process.env.CLAUDE_PROJECT_DIR||'.';const f=p.join(d,'.claude/helpers/statusline.cjs');const h=p.join(process.env.USERPROFILE||process.env.HOME||'.', '.claude/helpers/statusline.cjs');require(fs.existsSync(f)?f:h);\""
+    "command": "node .claude/helpers/statusline.cjs"
   },
   "permissions": {
     "allow": [
       "Bash(npx @claude-flow*)",
       "Bash(npx claude-flow*)",
-      "Bash(node .claude/*)",
-      "mcp__claude-flow__*"
+      "Bash(node .claude/helpers/hook-handler.cjs*)",
+      "Bash(node .claude/helpers/auto-memory-hook.mjs*)",
+      "Bash(node .claude/helpers/statusline.cjs*)",
+      "mcp__claude-flow__*",
+      "Bash(npx tsc*)",
+      "Bash(npm test*)",
+      "Bash(npm run build*)",
+      "Bash(npm run verify*)",
+      "Bash(wrangler deploy --dry-run*)",
+      "Bash(npx wrangler deploy --dry-run*)"
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)"
+      "Read(./.env.*)",
+      "Bash(npm publish*)",
+      "Bash(wrangler delete*)",
+      "Bash(npx wrangler delete*)",
+      "Bash(rm -rf*)",
+      "Bash(sudo*)",
+      "Bash(chmod 777*)",
+      "Bash(ssh*)",
+      "Bash(*> /dev/*)"
     ]
   },
   "model": "claude-sonnet-5",

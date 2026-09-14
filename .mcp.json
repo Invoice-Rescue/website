@@ -1,11 +1,9 @@
 {
   "mcpServers": {
     "claude-flow": {
-      "command": "cmd",
+      "description": "Claude Flow orchestration and memory mesh server",
+      "command": "npx",
       "args": [
-        "/c",
-        "npx",
-        "-y",
         "ruflo@latest",
         "mcp",
         "start"

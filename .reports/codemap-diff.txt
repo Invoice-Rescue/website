@@ -1,0 +1,51 @@
+================================================================================
+Codemap Generation & Architecture Diff Report
+Generated: 2026-09-14T04:00:00Z
+================================================================================
+
+1. Baseline Initialization Summary:
+--------------------------------------------------------------------------------
+- Mode: Initial baseline creation (no previous codemaps existed in docs/CODEMAPS/).
+- Generated Codemaps:
+  - docs/CODEMAPS/architecture.md (~750 tokens)
+  - docs/CODEMAPS/backend.md      (~850 tokens)
+  - docs/CODEMAPS/frontend.md     (~700 tokens)
+  - docs/CODEMAPS/data.md         (~800 tokens)
+  - docs/CODEMAPS/dependencies.md (~650 tokens)
+- Total Source Files Scanned: 31 files across backend, frontend, scripts, and tests.
+
+2. Detected System Architecture & Routes:
+--------------------------------------------------------------------------------
+- Entry Point: backend/src/index.ts (Cloudflare Worker fetch & scheduled handlers)
+- Public Routes:
+  - GET  /api/health
+  - GET  /api/statutory-rate
+  - POST /api/lead
+  - POST /api/billing/webhook
+- Admin Routes (requireAdminAuth Basic Auth):
+  - POST /api/clients
+  - POST /api/clients/:id/invoices/import
+  - GET  /admin
+  - POST /api/chase/:id/approve
+  - POST /api/chase/:id/skip
+- Client Portal Routes (authenticateClient HMAC cookie):
+  - GET  /portal
+  - POST /portal/login
+  - GET  /portal/verify
+  - GET  /portal/dashboard
+  - POST /portal/billing
+  - POST /portal/logout
+- Cron Triggers:
+  - 06:00 UTC daily (detect-overdue)
+  - 08:00 UTC Fri   (friday-report)
+
+3. Dependencies & Runtime Boundary:
+--------------------------------------------------------------------------------
+- Runtime Dependencies: 0 (Pure edge-native Worker with direct fetch() and crypto.subtle)
+- Database: Cloudflare D1 SQLite (invoice-rescue-db, 4 schema migrations)
+- Dev Dependencies: typescript (^7.0.2), wrangler (^4.126.0), tsx (^4.23.13), markdownlint-cli2 (^0.23.2)
+
+4. Staleness Warnings:
+--------------------------------------------------------------------------------
+- None. All generated codemaps and scanned documentation are fresh and reflect the current codebase state.
+================================================================================
