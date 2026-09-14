@@ -1,13 +1,16 @@
 ---
 name: vue-reviewer
 description: Expert Vue.js code reviewer specializing in Composition API correctness, reactivity pitfalls, component architecture, template security, and Vue-specific performance. Use for any change touching .vue, .ts/.js files with Vue imports, or Vue ecosystem code (Pinia, Vue Router, Nuxt). MUST BE USED for Vue projects.
+disabled: true
 tools:
-  - view_file
-  - grep_search
-  - find_by_name
-  - run_command
+    - view_file
+    - grep_search
+    - find_by_name
+    - run_command
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -147,12 +150,15 @@ You DO NOT refactor or rewrite code — you report findings only.
 ## Diagnostic Commands
 
 ```bash
+
 # Required
+
 npx eslint . --ext .vue,.ts,.js                    # ensure eslint-plugin-vue is configured
 vue-tsc --noEmit                                   # Vue-specific type checking
 npm run typecheck --if-present                     # respect project's canonical command
 
 # Useful
+
 npx eslint . --rule 'vue/multi-word-component-names: error'
 npx eslint . --rule 'vue/no-v-html: warn'
 npx eslint . --rule 'vue/require-default-prop: warn'
