@@ -182,6 +182,7 @@ Cloudflare D1 provides continuous Point-in-Time Recovery (PITR):
   2. Locate the endpoint `https://invoicerescue.co.uk/api/billing/webhook`.
   3. Reveal the Signing Secret (`whsec_...`).
   4. Run `npx wrangler secret put STRIPE_WEBHOOK_SECRET` and enter the secret.
+  5. Inspect the `webhook_events` D1 table (`npx wrangler d1 execute invoice-rescue-db --remote --command="SELECT * FROM webhook_events ORDER BY created_at_timestamp DESC LIMIT 5"`) to verify whether events are recorded as processed, duplicate, or stale.
 
 ### 6.2 Operator Admin Lockout (`401 Unauthorized`)
 

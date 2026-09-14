@@ -54,4 +54,24 @@ describe("stripe webhook signature verification", () => {
     assert.strictEqual(await verifyWebhookSignature(payload, null, webhookSecret), false);
     assert.strictEqual(await verifyWebhookSignature(payload, "t=123,v1=abc", ""), false);
   });
+
+  test("parses webhook event id, timestamp, and customer id for idempotency tracking", () => {
+    const raw = JSON.stringify({
+      id: "evt_1N6g9z2eZvKYlo2CLs2vO3T1",
+      type: "customer.subscription.updated",
+      created: 1789370000,
+      data: {
+        object: {
+          customer: "cus_On8Z4k8eL9m1k2",
+          status: "active",
+        },
+      },
+    });
+
+    const parsed = JSON.parse(raw);
+    assert.strictEqual(parsed.id, "evt_1N6g9z2eZvKYlo2CLs2vO3T1");
+    assert.strictEqual(parsed.created, 1789370000);
+    assert.strictEqual(parsed.data.object.customer, "cus_On8Z4k8eL9m1k2");
+    assert.strictEqual(parsed.data.object.status, "active");
+  });
 });

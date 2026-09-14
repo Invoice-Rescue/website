@@ -163,7 +163,11 @@ All admin endpoints require `Authorization: Basic <credentials>` where password 
 
 #### `POST /api/billing/webhook`
 
-- **Description**: Handles Stripe subscription lifecycle events.
+- **Description**: Handles Stripe subscription lifecycle events with cryptographic signature validation and database-backed idempotency.
+- **Idempotency & Sequence Protection**:
+  - Each event is recorded in the `webhook_events` table by its Stripe event ID (`evt_...`).
+  - Duplicate deliveries return `200 OK` (`{"ok":true,"duplicate":true}`) immediately without executing side effects.
+  - Out-of-order events (where a newer subscription event was already processed) are logged and return `200 OK` (`{"ok":true,"skipped_stale":true}`) to avoid regressing client status.
 - **Handled Events**:
   - `customer.subscription.updated`: Sets client status to `active` or `paused`.
   - `customer.subscription.deleted`: Sets client status to `churned`.

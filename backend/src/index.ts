@@ -690,12 +690,51 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     return Response.json({ ok: false, error: "Invalid signature." }, { status: 400, headers: SECURITY_HEADERS });
   }
 
-  const event = JSON.parse(rawBody) as { type: string; data: { object: { customer: string; status?: string } } };
-  const customerId = event.data.object.customer;
+  const event = JSON.parse(rawBody) as {
+    id?: string;
+    type: string;
+    created?: number;
+    data: { object: { customer?: string; status?: string } };
+  };
 
-  if (event.type === "customer.subscription.deleted") {
+  const eventId = event.id;
+  const customerId = event.data?.object?.customer;
+  const createdTimestamp = typeof event.created === "number" ? event.created : Math.floor(Date.now() / 1000);
+
+  // 1. Idempotency guard: Return 200 OK without side-effects if event was already processed
+  if (eventId) {
+    const existing = await env.DB.prepare("SELECT id FROM webhook_events WHERE id = ?1").bind(eventId).first();
+    if (existing) {
+      return Response.json({ ok: true, duplicate: true }, { headers: SECURITY_HEADERS });
+    }
+  }
+
+  // 2. Out-of-order delivery protection for subscription updates
+  if (customerId && (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted")) {
+    const newer = await env.DB.prepare(
+      `SELECT id FROM webhook_events 
+       WHERE customer_id = ?1 
+         AND event_type IN ('customer.subscription.updated', 'customer.subscription.deleted')
+         AND created_at_timestamp > ?2`,
+    )
+      .bind(customerId, createdTimestamp)
+      .first();
+
+    if (newer) {
+      if (eventId) {
+        await env.DB.prepare(
+          "INSERT INTO webhook_events (id, event_type, customer_id, created_at_timestamp) VALUES (?1, ?2, ?3, ?4)",
+        )
+          .bind(eventId, event.type, customerId, createdTimestamp)
+          .run();
+      }
+      return Response.json({ ok: true, skipped_stale: true }, { headers: SECURITY_HEADERS });
+    }
+  }
+
+  if (customerId && event.type === "customer.subscription.deleted") {
     await env.DB.prepare(`UPDATE clients SET status = 'churned' WHERE stripe_customer_id = ?1`).bind(customerId).run();
-  } else if (event.type === "customer.subscription.updated") {
+  } else if (customerId && event.type === "customer.subscription.updated") {
     const subStatus = event.data.object.status;
     const newStatus =
       subStatus === "active" || subStatus === "trialing"
@@ -714,11 +753,20 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
         to: env.NOTIFY_TO,
         from: env.NOTIFY_FROM,
         subject: "Invoice Rescue: a client payment failed",
-        text: `Stripe customer ${customerId} had a failed payment. Check the Stripe dashboard.`,
+        text: `Stripe customer ${customerId || "unknown"} had a failed payment. Check the Stripe dashboard.`,
       });
     } catch (err) {
       console.error("Payment-failure notification email failed:", err);
     }
+  }
+
+  // Record successful processing in webhook_events
+  if (eventId) {
+    await env.DB.prepare(
+      "INSERT INTO webhook_events (id, event_type, customer_id, created_at_timestamp) VALUES (?1, ?2, ?3, ?4)",
+    )
+      .bind(eventId, event.type, customerId ?? null, createdTimestamp)
+      .run();
   }
 
   return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
@@ -819,40 +867,44 @@ async function runFridayReport(env: Env): Promise<void> {
     .all<ClientRow>();
 
   for (const client of clients.results ?? []) {
-    const paid = await env.DB.prepare(
-      `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status = 'paid' AND paid_date >= date('now', '-7 days')`,
-    )
-      .bind(client.id)
-      .all<InvoiceSummaryRow>();
-    const promised = await env.DB.prepare(
-      `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status = 'promised'`,
-    )
-      .bind(client.id)
-      .all<InvoiceSummaryRow>();
-    const escalating = await env.DB.prepare(
-      `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status IN ('overdue', 'escalated')`,
-    )
-      .bind(client.id)
-      .all<InvoiceSummaryRow>();
+    try {
+      const paid = await env.DB.prepare(
+        `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status = 'paid' AND paid_date >= date('now', '-7 days')`,
+      )
+        .bind(client.id)
+        .all<InvoiceSummaryRow>();
+      const promised = await env.DB.prepare(
+        `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status = 'promised'`,
+      )
+        .bind(client.id)
+        .all<InvoiceSummaryRow>();
+      const escalating = await env.DB.prepare(
+        `SELECT invoice_number, amount_pence FROM invoices WHERE client_id = ?1 AND status IN ('overdue', 'escalated')`,
+      )
+        .bind(client.id)
+        .all<InvoiceSummaryRow>();
 
-    const section = (label: string, rows: InvoiceSummaryRow[]) =>
-      rows.length === 0
-        ? `${label}: none`
-        : `${label}:\n` + rows.map((r) => `  ${r.invoice_number} — £${(r.amount_pence / 100).toFixed(2)}`).join("\n");
+      const section = (label: string, rows: InvoiceSummaryRow[]) =>
+        rows.length === 0
+          ? `${label}: none`
+          : `${label}:\n` + rows.map((r) => `  ${r.invoice_number} — £${(r.amount_pence / 100).toFixed(2)}`).join("\n");
 
-    await env.SEND.send({
-      to: client.contact_email,
-      from: env.NOTIFY_FROM,
-      subject: "Invoice Rescue — your Friday cash report",
-      text: [
-        `Hi ${client.company_name},`,
-        "",
-        section("Paid this week", paid.results ?? []),
-        "",
-        section("Promised", promised.results ?? []),
-        "",
-        section("Still escalating", escalating.results ?? []),
-      ].join("\n"),
-    });
+      await env.SEND.send({
+        to: client.contact_email,
+        from: env.NOTIFY_FROM,
+        subject: "Invoice Rescue — your Friday cash report",
+        text: [
+          `Hi ${client.company_name},`,
+          "",
+          section("Paid this week", paid.results ?? []),
+          "",
+          section("Promised", promised.results ?? []),
+          "",
+          section("Still escalating", escalating.results ?? []),
+        ].join("\n"),
+      });
+    } catch (err) {
+      console.error(`Friday report delivery failed for client ${client.id} (${client.company_name}):`, err);
+    }
   }
 }
