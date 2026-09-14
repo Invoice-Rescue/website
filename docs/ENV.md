@@ -30,7 +30,6 @@ The following environment variables and secrets are defined across [`.env.exampl
 | `CLOUDFLARE_API_TOKEN` | Secret | Yes | CI/CD & Deploy | Cloudflare API token with Workers Scripts Write and D1 edit permissions. | `cfat_...` |
 | `NOTIFY_TO` | Var | Yes | `wrangler.jsonc` | Operator email address receiving new lead alerts, failed payment notices, and chase review digests. | `tiborcc2@gmail.com` |
 | `NOTIFY_FROM` | Var | Yes | `wrangler.jsonc` | Sender email address for outgoing system notifications. Must be a verified domain. | `hello@invoicerescue.co.uk` |
-| `INBOX_FORWARD_TO` | Var | Yes | `wrangler.jsonc` | Inbound email forwarding destination address for Cloudflare Email Routing. | `tibor@invoicerescue.co.uk` |
 | `OPERATOR_NAME` | Var | Yes | `wrangler.jsonc` | Human operator display name recorded in `chase_log.reviewed_by` and surfaced in client audit trails. | `Tibor` |
 | `BOE_BASE_RATE_PERCENT` | Var | Yes | `wrangler.jsonc` | Bank of England base interest rate percentage used to compute statutory interest (base + 8%). | `3.75` |
 | `STRIPE_PUBLISHABLE_KEY` | Var | Yes | `wrangler.jsonc` | Stripe public key safe to expose in client-side landing and pricing pages. | `pk_test_51...` |

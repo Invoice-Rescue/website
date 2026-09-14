@@ -35,8 +35,8 @@
   "send_email": [
     {
       "name": "NOTIFY",
-      // Must be a VERIFIED Email Routing destination address on your account.
-      // This is your current routing destination for hello@invoicerescue.co.uk — change if needed.
+      // Must be a VERIFIED Email Routing destination address on your account
+      // (`wrangler email routing addresses list`).
       "destination_address": "tiborcc2@gmail.com"
     },
     {
@@ -49,11 +49,6 @@
   "vars": {
     "NOTIFY_TO": "tiborcc2@gmail.com",
     "NOTIFY_FROM": "hello@invoicerescue.co.uk",
-    // Where the Worker's email() handler forwards inbound mail — matches the address the
-    // existing (Worker-bypassing) Email Routing rules already forward to, so pointing a rule
-    // at this Worker is a no-op for where mail lands. Must be a verified Email Routing
-    // destination address (`wrangler email routing addresses list`).
-    "INBOX_FORWARD_TO": "tibor@invoicerescue.co.uk",
     // Shown in the client portal as "reviewed and approved by {OPERATOR_NAME}" on every sent
     // chase message — the human-review audit trail. Update if this stops being a one-person show.
     "OPERATOR_NAME": "Tibor",

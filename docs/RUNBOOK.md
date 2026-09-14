@@ -9,7 +9,7 @@ This runbook outlines standard operating procedures, deployment workflows, monit
 Invoice Rescue is deployed as a unified Cloudflare Worker with static asset serving and a serverless SQLite database (Cloudflare D1):
 
 - **Domain**: `invoicerescue.co.uk`
-- **Platform**: Cloudflare Workers + D1 (`WEUR` region) + Cloudflare Email Routing
+- **Platform**: Cloudflare Workers + D1 (`WEUR` region) + Cloudflare Email Sending (outbound); Google Workspace (inbound MX)
 - **Worker Script**: `backend/src/index.ts`
 - **Static Assets**: `frontend/` (served directly at edge via `assets` binding)
 - **Database**: `invoice-rescue-db` (`b9e84ca4-bcd2-44e7-b4f2-d2dc61e1a29f`)
@@ -201,18 +201,26 @@ Cloudflare D1 provides continuous Point-in-Time Recovery (PITR):
   1. Verify API key status in Google AI Studio.
   2. Invoices remain overdue; once the key is restored, the next cron execution will automatically draft the pending steps.
 
-### 6.4 Inbound Email Routing Failure
+### 6.4 Outbound Email Failure
 
-- **Symptoms**: Emails sent to `@invoicerescue.co.uk` are not forwarded to `INBOX_FORWARD_TO`.
-- **Root Cause**: Forwarding address is unverified in Cloudflare Email Routing.
+- **Symptoms**: Lead alerts, magic links, or chase emails don't arrive, or land in spam.
+- **Root Cause**: Email Sending DNS records missing/changed, or a `NOTIFY` destination no longer verified.
 - **Remediation**:
-  1. Check verified destination addresses:
+  1. Compare live DNS against the required records:
 
      ```bash
-     npx wrangler email routing addresses list
+     npx wrangler email sending dns get invoicerescue.co.uk
      ```
 
-  2. Ensure `INBOX_FORWARD_TO` in `wrangler.jsonc` matches an active verified destination address.
+  2. Send a test and check the recipient's `Authentication-Results` shows `dmarc=pass`:
+
+     ```bash
+     npx wrangler email sending send --from hello@invoicerescue.co.uk --to <address-you-control> --subject test --text test
+     ```
+
+  3. For `NOTIFY` failures, confirm `tiborcc2@gmail.com` is still listed in `npx wrangler email routing addresses list`.
+
+Inbound mail is not handled by Cloudflare: the root MX is Google Workspace (`smtp.google.com`). Missing inbound mail is a Google Workspace issue.
 
 ---
 

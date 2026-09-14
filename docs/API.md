@@ -179,4 +179,3 @@ All admin endpoints require `Authorization: Basic <credentials>` where password 
 
 - **Daily Overdue Detection (`0 6 * * *`)**: Identifies overdue invoices, computes statutory interest and fixed compensation, queries Gemini model to draft personalized debtor messages, stores draft in `chase_log`, and notifies operator.
 - **Friday Cash Report (`0 8 * * FRI`)**: Summarizes payments received, promised amounts, and overdue debts for the past 7 days and delivers automated reports to all active clients.
-- **Inbound Email Handler (`email`)**: Cloudflare Email Routing hook forwarding inbound correspondence to `INBOX_FORWARD_TO`.

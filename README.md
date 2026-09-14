@@ -91,8 +91,8 @@ Because the domain is already on Cloudflare, this is one click, no DNS work.
 The Worker emails you every new lead via Cloudflare Email Service (`NOTIFY` binding).
 Requirements (both should already be true on your account):
 
-1. Email Routing is enabled on `invoicerescue.co.uk` ✔ (your hello@ routing uses it)
-2. `tiborcc2@gmail.com` is a **verified destination address** ✔ (it receives your routed mail)
+1. Email Sending is enabled on `invoicerescue.co.uk` ✔ (`npx wrangler email sending list`)
+2. `tiborcc2@gmail.com` is a **verified destination address** ✔ (required by the restricted `NOTIFY` binding)
 
 If a lead email ever fails, the lead is still saved to D1 — notification is best-effort
 by design. Check: dashboard → Email → Email Routing → Destination addresses.

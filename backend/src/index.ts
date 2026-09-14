@@ -42,14 +42,10 @@
  *   STRIPE_WEBHOOK_SECRET — signing secret for /api/billing/webhook, from the Stripe Dashboard webhook config
  *   PORTAL_SESSION_SECRET — HMAC key for client portal magic-link + session tokens
  * Vars:
- *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT, OPERATOR_NAME, STRIPE_PUBLISHABLE_KEY, INBOX_FORWARD_TO
+ *   NOTIFY_TO, NOTIFY_FROM, BOE_BASE_RATE_PERCENT, OPERATOR_NAME, STRIPE_PUBLISHABLE_KEY
  *
- * Inbound email (Email Routing → email() handler below): every address on invoicerescue.co.uk
- * currently forwards straight to tibor@invoicerescue.co.uk via a Cloudflare Email Routing rule
- * that bypasses this Worker entirely. The email() handler exists so that rule *can* be pointed
- * at this Worker (Dashboard, or `wrangler email routing rules create`), at which point it just
- * logs-and-forwards to the same address — no behavior change until you also want to do something
- * with debtor/client replies (parse + store + surface in /admin, see routing.md's DO pattern).
+ * Email: outbound goes through Cloudflare Email Sending (DMARC-aligned via cf-bounce.invoicerescue.co.uk).
+ * Inbound mail is NOT handled here — the root MX is Google Workspace, so replies land in the operator's inbox.
  *
  * /admin, /api/chase/*, /api/clients, and the CSV import route are gated by
  * requireAdminAuth() — a single shared secret (ADMIN_SECRET) checked via HTTP
@@ -103,7 +99,6 @@ interface Env {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   PORTAL_SESSION_SECRET: string;
-  INBOX_FORWARD_TO: string;
 }
 
 interface LeadInput {
@@ -252,13 +247,6 @@ export default {
     } else if (event.cron === "0 8 * * FRI") {
       await runFridayReport(env);
     }
-  },
-
-  // ponytail: log-and-forward only. Upgrade to parse (postal-mime) + store once a debtor/client
-  // reply needs to show up in /admin rather than just landing in the operator's own inbox.
-  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
-    console.log(`Inbound email: ${message.from} -> ${message.to} (${message.headers.get("subject") ?? "no subject"})`);
-    await message.forward(env.INBOX_FORWARD_TO);
   },
 } satisfies ExportedHandler<Env>;
 

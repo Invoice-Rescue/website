@@ -26,7 +26,7 @@ Whenever you are implementing features, refactoring, or verifying behavior in th
 | **Workers & Assets Routing** | `backend/src/index.ts`<br>`wrangler.jsonc` | Cloudflare Workers Docs | <https://developers.cloudflare.com/workers/> |
 | **Wrangler CLI** | CLI commands (`dev`, `deploy`, `secret`) | Cloudflare Wrangler Docs | <https://developers.cloudflare.com/workers/wrangler/> |
 | **D1 Database & Migrations** | `backend/db/migrations/`<br>`backend/src/index.ts` | Cloudflare D1 Docs | <https://developers.cloudflare.com/d1/> |
-| **Email Routing & Send Email** | `send_email` bindings (`NOTIFY`, `SEND`)<br>`email()` handler | Cloudflare Email Docs | <https://developers.cloudflare.com/email-routing/><br><https://developers.cloudflare.com/workers/runtime-apis/bindings/send-email/> |
+| **Email Sending** | `send_email` bindings (`NOTIFY`, `SEND`) | Cloudflare Email Service Docs | <https://developers.cloudflare.com/email-service/><br><https://developers.cloudflare.com/workers/runtime-apis/bindings/send-email/> |
 | **Stripe REST API & Webhooks** | `backend/src/lib/stripe.ts` | Stripe Developer Docs | <https://docs.stripe.com/api><br><https://docs.stripe.com/webhooks> |
 | **Gemini AI Drafting** | `backend/src/lib/gemini.ts` | Google AI Docs | <https://ai.google.dev/gemini-api/docs> |
 | **Web Crypto API** | `backend/src/lib/portal-auth.ts`<br>`backend/src/lib/stripe.ts` | MDN Web Docs | <https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API> |
