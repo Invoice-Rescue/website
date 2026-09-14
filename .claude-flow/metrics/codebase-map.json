@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-31T14:13:15.292Z",
+  "timestamp": "2026-09-13T12:32:07.515Z",
   "projectRoot": "D:\\Dev\\Workspaces\\Active\\invoice-rescue",
   "structure": {
     "hasPackageJson": true,
@@ -7,5 +7,5 @@
     "hasClaudeConfig": true,
     "hasClaudeFlow": true
   },
-  "scannedAt": 1788185595293
+  "scannedAt": 1789302727515
 }

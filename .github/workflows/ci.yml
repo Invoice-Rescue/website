@@ -1,4 +1,5 @@
 name: CI
+# Reference: https://docs.github.com/en/actions
 
 on:
   push:
@@ -8,9 +9,16 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    name: Typecheck & Build
+    name: Lint, Typecheck & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,8 +33,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint markdown documentation
+        run: npm run lint:md
+
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
-      - name: Verify Worker bundling
-        run: npm run build
+      - name: Run automated test suite
+        run: npm test
+
+      - name: Verify Cloudflare Worker bundling
+        run: npx wrangler deploy --dry-run

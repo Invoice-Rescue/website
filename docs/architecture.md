@@ -5,7 +5,7 @@ split the way it is, and where to put new things.
 
 ## The split: frontend vs. backend, one deployment
 
-```
+```text
                         wrangler deploy
                               │
               ┌───────────────┴───────────────┐
@@ -53,7 +53,7 @@ and request handling) in one file — splitting them is what makes the
 ## Where things live, and why
 
 | Path | What | Why here |
-|---|---|---|
+| --- | --- | --- |
 | `frontend/index.html` | The landing page markup + inline styles + form-submit script | Static asset — Cloudflare serves it with no Worker invocation, so it loads even if the Worker has a bug |
 | `frontend/robots.txt`, `frontend/sitemap.xml` | Crawler files | Must live inside the assets directory to actually be served at `/robots.txt` and `/sitemap.xml` |
 | `backend/src/index.ts` | Request handling for `/api/lead` and `/api/health` only | Everything that touches D1 or sends email is server-side logic — it has no reason to also own HTML rendering |

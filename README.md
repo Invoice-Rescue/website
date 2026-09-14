@@ -13,7 +13,7 @@ external dependencies, zero monthly cost.
 
 ## Project structure
 
-```
+```text
 invoice-rescue/
 ├── frontend/              Static landing page — served directly by Cloudflare
 │   ├── index.html          as static assets, no Worker code runs for "/"
@@ -46,7 +46,7 @@ invoice-rescue/
 **Routes:**
 
 | Method | Path | What |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/health` | Health check |
 | POST | `/api/lead` | Landing-page free-audit form |
 | POST | `/api/clients` | Onboard a new client — **requires admin auth, see below** |
@@ -68,7 +68,7 @@ to keep in sync.
 ## What already exists in your Cloudflare account (created 2026-07-15)
 
 | Resource | Name | Detail |
-|---|---|---|
+| --- | --- | --- |
 | D1 database | `invoice-rescue-db` | id `b9e84ca4-bcd2-44e7-b4f2-d2dc61e1a29f`, region WEUR |
 | Schema | 4 tables + indexes | `leads`, `clients`, `invoices`, `chase_log` — tracked via `wrangler d1 migrations`, see CLAUDE.md |
 
@@ -186,4 +186,4 @@ pragmatic first path until a client actually asks for live sync (§4.1, §6).
 
 ## Contact
 
-hello@invoicerescue.co.uk
+<hello@invoicerescue.co.uk>

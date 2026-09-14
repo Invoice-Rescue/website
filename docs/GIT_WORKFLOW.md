@@ -8,7 +8,7 @@ This document defines the version control standards, branching models, commit co
 
 We use **GitHub Flow** for continuous, reliable deployment:
 
-```
+```text
 main (protected, always deployable)
   │
   ├── feature/stripe-billing-portal   ──> PR ──> merge to main
@@ -31,7 +31,7 @@ Commit messages must follow the [Conventional Commits](https://www.conventionalc
 
 ### Structure
 
-```
+```text
 <type>(<scope>): <subject>
 
 [optional body explaining why this change is necessary]

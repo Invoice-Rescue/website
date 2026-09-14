@@ -1,0 +1,45 @@
+[
+  {
+    "id": "eval-001",
+    "description": "Standard reminder step 1 without statutory interest",
+    "input": {
+      "step": 1,
+      "stepLabel": "reminder",
+      "invoiceNumber": "INV-101",
+      "amountPence": 100000,
+      "currency": "GBP",
+      "daysOverdue": 7,
+      "statutoryInterestPence": 225,
+      "fixedCompensationPence": 7000,
+      "clientVoiceNotes": null
+    },
+    "expected": {
+      "mustContain": ["INV-101", "GBP 1000.00", "reminder"],
+      "mustNotContain": ["Late Payment", "statutory interest", "compensation"]
+    }
+  },
+  {
+    "id": "eval-002",
+    "description": "Firm follow-up step 2 with statutory interest and compensation",
+    "input": {
+      "step": 2,
+      "stepLabel": "firm follow-up",
+      "invoiceNumber": "INV-102",
+      "amountPence": 250000,
+      "currency": "GBP",
+      "daysOverdue": 14,
+      "statutoryInterestPence": 1127,
+      "fixedCompensationPence": 7000,
+      "clientVoiceNotes": "Direct and respectful tone"
+    },
+    "expected": {
+      "mustContain": [
+        "INV-102",
+        "GBP 2500.00",
+        "statutory interest of GBP 11.27",
+        "fixed compensation of GBP 70.00",
+        "Late Payment of Commercial Debts (Interest) Act 1998"
+      ]
+    }
+  }
+]

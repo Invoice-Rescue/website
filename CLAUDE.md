@@ -9,8 +9,11 @@ npx wrangler dev --port 8787          # local dev server (needs .dev.vars — se
 npx tsc --noEmit                      # type-check (wrangler deploy doesn't need this, but it's the only build gate)
 npx wrangler deploy                   # deploy (bundles + uploads in one step, no separate build)
 npx wrangler types                    # regenerate worker-configuration.d.ts from wrangler.jsonc bindings
+npm test                              # run automated unit test suite (tests/**/*.test.ts via tsx)
+npm run verify                        # complete quality gate: markdownlint, tsc, tests, and wrangler bundle check
+npm run db:seed                       # seed local D1 database with sample client, invoices, and draft chase log
 
-# local dev secrets (gitignored, not in wrangler.jsonc)
+# local dev secrets (gitignored, not in wrangler.jsonc — template in .env.example)
 printf 'GEMINI_API_KEY=...\nADMIN_SECRET=local-dev-secret\nSTRIPE_SECRET_KEY=...\nSTRIPE_WEBHOOK_SECRET=...\nPORTAL_SESSION_SECRET=...\n' > .dev.vars
 
 # smoke test against a running dev server (or live deploy)
@@ -20,7 +23,7 @@ BASE_URL=http://127.0.0.1:8787 ADMIN_SECRET=local-dev-secret STRIPE_WEBHOOK_SECR
 curl "http://127.0.0.1:8787/cdn-cgi/handler/scheduled?cron=0+6+*+*+*"
 ```
 
-There is no lint config and no unit test framework — `backend/test/rest-api.sh` (curl-based) is the only test, and `npx tsc --noEmit` is the only static check. Treat both as required before calling a backend change done.
+Automated unit tests (`npm test`) cover statutory interest, CSV parsing, escalation cadence, portal HMAC auth, and Stripe webhook signatures. Run `npm run verify` before committing. Always verify framework, API, and statutory behavior against [docs/reference-docs.md](docs/reference-docs.md) and the `curating-reference-docs` allowlist before coding.
 
 ## Architecture
 

@@ -1,0 +1,5 @@
+debtor_name,debtor_email,invoice_number,amount,currency,issued_date,due_date
+"Acme Engineering Ltd",accounts@acme-engineering.co.uk,INV-2026-001,1450.00,GBP,2026-07-01,2026-08-01
+"Apex Design Studio",billing@apexdesign.co.uk,INV-2026-002,3200.50,GBP,2026-07-10,2026-08-10
+"Vanguard Logistics",finance@vanguardlogistics.test,INV-2026-003,890.00,GBP,2026-07-15,2026-08-15
+"Redwood Consulting",accounts@redwood.test,INV-2026-004,11500.00,GBP,2026-06-20,2026-07-20

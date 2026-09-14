@@ -1,6 +1,6 @@
 {
   "schemaVersion": "ecc.install.v1",
-  "installedAt": "2026-09-11T01:05:35.069Z",
+  "installedAt": "2026-09-14T00:09:31.666Z",
   "target": {
     "id": "antigravity-project",
     "target": "antigravity",
@@ -3910,17 +3910,6 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "aff91aef917cba9c65681ae77197cee93ce9b697ee8916ea684ef8537c99fb52"
-    },
-    {
-      "kind": "copy-file",
-      "moduleId": "framework-language",
-      "sourcePath": "D:\\Business HQ\\npm-cache\\_npx\\1364667e9cc171a1\\node_modules\\ecc-universal\\skills\\motion-ui\\SKILL.md",
-      "sourceRelativePath": "skills\\motion-ui\\SKILL.md",
-      "destinationPath": "D:\\Dev\\Workspaces\\Active\\invoice-rescue\\.agents\\skills\\motion-ui\\SKILL.md",
-      "strategy": "preserve-relative-path",
-      "ownership": "managed",
-      "scaffoldOnly": false,
-      "contentSha256": "0c43aa186d64c5e094de946927581683e986fee496b744bc29433bbad3d169d2"
     },
     {
       "kind": "copy-file",

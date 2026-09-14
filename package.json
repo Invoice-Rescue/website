@@ -16,7 +16,12 @@
     "deps:update": "npm update && npm run typecheck && npm run build",
     "deps:audit": "npm audit",
     "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint:md": "markdownlint-cli2 \"**/*.md\"",
+    "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
+    "lint": "npm run lint:md && npm run typecheck",
+    "test": "tsx --test tests/**/*.test.ts",
+    "db:seed": "tsx scripts/seed-local-db.ts",
+    "verify": "npm run lint && npm run test && npm run build"
   },
   "repository": {
     "type": "git",
@@ -33,7 +38,12 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260826.1",
     "@types/node": "^26.1.1",
+    "markdownlint-cli2": "^0.23.2",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "wrangler": "^4.126.0"
+  },
+  "overrides": {
+    "smol-toml": "^1.7.1"
   }
 }

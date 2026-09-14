@@ -24,12 +24,16 @@ function toBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64Url(s: string): Uint8Array {
-  const padded = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+function fromBase64Url(s: string): Uint8Array | null {
+  try {
+    const padded = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 async function hmacKey(secret: string): Promise<CryptoKey> {
@@ -60,18 +64,22 @@ async function verifyToken(
   if (parts.length !== 2) return null;
   const [payloadB64, sigB64] = parts;
 
+  const sigBytes = fromBase64Url(sigB64);
+  const payloadBytes = fromBase64Url(payloadB64);
+  if (!sigBytes || !payloadBytes) return null;
+
   const key = await hmacKey(secret);
   const valid = await crypto.subtle.verify(
     "HMAC",
     key,
-    fromBase64Url(sigB64),
+    sigBytes,
     new TextEncoder().encode(payloadB64),
   );
   if (!valid) return null;
 
   let payload: TokenPayload;
   try {
-    payload = JSON.parse(new TextDecoder().decode(fromBase64Url(payloadB64)));
+    payload = JSON.parse(new TextDecoder().decode(payloadBytes));
   } catch {
     return null;
   }

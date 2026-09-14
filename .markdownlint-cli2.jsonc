@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "config": {
+    "default": true,
+    // MD013/line-length: false — prevent breaking on long lines, tables, URLs, and code snippets
+    "MD013": false,
+    // MD033/no-inline-html: false — allow inline HTML elements (<details>, <img>, <summary>, <br>)
+    "MD033": false,
+    // MD024/no-duplicate-heading: siblings_only — allow identical subheadings in different sections
+    "MD024": {
+      "siblings_only": true
+    },
+    // MD029/ol-prefix: false — avoid fighting list styles (1. 2. 3. vs 1. 1. 1.)
+    "MD029": false,
+    // MD041/first-line-heading: false — avoid issues with front matter, badges, or title comments
+    "MD041": false
+  },
+  "ignores": [
+    "node_modules/**",
+    "build/**",
+    "dist/**",
+    "vendor/**",
+    ".wrangler/**",
+    ".git/**",
+    ".agents/**",
+    ".claude/**",
+    ".claude-flow/**",
+    ".swarm/**",
+    ".vscode/**",
+    "docs/generated/**"
+  ]
+}

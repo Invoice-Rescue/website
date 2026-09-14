@@ -1,0 +1,17 @@
+# Dependencies & Outputs
+node_modules/
+build/
+dist/
+vendor/
+.wrangler/
+.git/
+
+# Agent, Tooling & Internal Workflows
+.agents/
+.claude/
+.claude-flow/
+.swarm/
+.vscode/
+
+# Generated Documentation & Artifacts
+docs/generated/

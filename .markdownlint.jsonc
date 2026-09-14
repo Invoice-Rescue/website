@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-config-schema.json",
+  "default": true,
+  // MD013/line-length: false — prevent breaking on long lines, tables, code blocks, and URLs
+  "MD013": false,
+  // MD033/no-inline-html: false — allow inline HTML like <details>, <img>, <summary>, and <br>
+  "MD033": false,
+  // MD024/no-duplicate-heading: siblings_only — allow identical subheadings across different parent sections
+  "MD024": {
+    "siblings_only": true
+  },
+  // MD029/ol-prefix: false — avoid fighting list numbering styles (1. 2. 3. vs 1. 1. 1.)
+  "MD029": false,
+  // MD041/first-line-heading: false — avoid issues with front matter, top badges, or title comments
+  "MD041": false
+}
