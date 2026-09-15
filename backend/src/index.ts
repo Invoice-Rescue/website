@@ -80,26 +80,15 @@ import {
   type PortalChaseRow,
 } from "./lib/portal";
 
-/** Minimal interface for the send_email binding's plain-object API.
- * Run `npx wrangler types` to generate exact, up-to-date binding types. */
-interface EmailSender {
-  send(message: { to: string; from: string; subject: string; text?: string; html?: string }): Promise<unknown>;
-}
+// Env is the ambient global interface generated into worker-configuration.d.ts by
+// `npx wrangler types` (see package.json's "types" script) — it already declares
+// NOTIFY/SEND as the real runtime `SendEmail` type, so it's used as-is here rather
+// than hand-rolled, to stay accurate as bindings change. Re-run that script after
+// editing wrangler.jsonc's bindings/vars.
 
-interface Env {
-  DB: D1Database;
-  NOTIFY: EmailSender;
-  SEND: EmailSender;
-  NOTIFY_TO: string;
-  NOTIFY_FROM: string;
-  BOE_BASE_RATE_PERCENT: string;
-  OPERATOR_NAME: string;
-  GEMINI_API_KEY: string;
-  ADMIN_SECRET: string;
-  STRIPE_SECRET_KEY: string;
-  STRIPE_WEBHOOK_SECRET: string;
-  PORTAL_SESSION_SECRET: string;
-}
+/** Display name shown to recipients on every outbound send; the address itself
+ * always comes from env.NOTIFY_FROM. */
+const SENDER_NAME = "Invoice Rescue";
 
 interface LeadInput {
   name: string;
@@ -277,7 +266,7 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
   try {
     await env.NOTIFY.send({
       to: env.NOTIFY_TO,
-      from: env.NOTIFY_FROM,
+      from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
       subject: `New Invoice Rescue lead: ${lead.name}${lead.company ? " — " + lead.company : ""}`,
       text: [
         "New free-audit request from the landing page.",
@@ -511,7 +500,7 @@ async function handleChaseApprove(request: Request, env: Env, chaseIdParam: stri
 
   await env.SEND.send({
     to: row.debtor_email,
-    from: env.NOTIFY_FROM,
+    from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
     subject: row.subject ?? `Re: Invoice ${row.invoice_number}`,
     text: body,
   });
@@ -582,7 +571,7 @@ async function handlePortalLoginRequest(request: Request, env: Env): Promise<Res
     try {
       await env.SEND.send({
         to: email,
-        from: env.NOTIFY_FROM,
+        from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
         subject: "Your Invoice Rescue login link",
         text: `Click to log in to your Invoice Rescue dashboard (expires in 15 minutes):\n\n${verifyUrl}\n\nDidn't request this? You can ignore this email.`,
       });
@@ -739,7 +728,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     try {
       await env.NOTIFY.send({
         to: env.NOTIFY_TO,
-        from: env.NOTIFY_FROM,
+        from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
         subject: "Invoice Rescue: a client payment failed",
         text: `Stripe customer ${customerId || "unknown"} had a failed payment. Check the Stripe dashboard.`,
       });
@@ -832,7 +821,7 @@ async function runOverdueDetection(env: Env): Promise<void> {
   if (draftCount && draftCount.n > 0) {
     await env.NOTIFY.send({
       to: env.NOTIFY_TO,
-      from: env.NOTIFY_FROM,
+      from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
       subject: `Invoice Rescue: ${draftCount.n} chase draft(s) ready for review`,
       text: `${draftCount.n} chase message(s) are waiting for your review at /admin.`,
     });
@@ -879,7 +868,7 @@ async function runFridayReport(env: Env): Promise<void> {
 
       await env.SEND.send({
         to: client.contact_email,
-        from: env.NOTIFY_FROM,
+        from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
         subject: "Invoice Rescue — your Friday cash report",
         text: [
           `Hi ${client.company_name},`,
