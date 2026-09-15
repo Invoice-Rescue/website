@@ -418,11 +418,13 @@ async function handleInvoiceImport(request: Request, env: Env, clientIdParam: st
     );
   }
 
+  const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
   let imported = 0;
   const errors: string[] = [];
   for (const [i, row] of rows.entries()) {
-    const debtorName = row.debtor_name?.trim();
-    const invoiceNumber = row.invoice_number?.trim();
+    const debtorName = str(row.debtor_name, 160);
+    const invoiceNumber = str(row.invoice_number, 60);
     const dueDate = row.due_date?.trim();
     const amount = Number(row.amount);
     if (!debtorName || !invoiceNumber || !dueDate || !Number.isFinite(amount) || amount <= 0) {
@@ -437,10 +439,10 @@ async function handleInvoiceImport(request: Request, env: Env, clientIdParam: st
       .bind(
         clientId,
         debtorName,
-        row.debtor_email?.trim() || null,
+        str(row.debtor_email, 200) || null,
         invoiceNumber,
         Math.round(amount * 100),
-        row.currency?.trim() || "GBP",
+        str(row.currency, 10) || "GBP",
         row.issued_date?.trim() || null,
         dueDate,
       )

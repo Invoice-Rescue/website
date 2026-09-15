@@ -12,9 +12,17 @@ export async function draftChaseMessage(apiKey: string, prompt: string): Promise
     throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
   }
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    promptFeedback?: { blockReason?: string };
   };
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked the prompt: ${data.promptFeedback.blockReason}`);
+  }
+  const candidate = data.candidates?.[0];
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    throw new Error(`Gemini did not finish cleanly: ${candidate.finishReason}`);
+  }
+  const text = candidate?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini returned no draft text");
   return text.trim();
 }
