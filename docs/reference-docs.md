@@ -32,6 +32,7 @@ Whenever you are implementing features, refactoring, or verifying behavior in th
 | **Web Crypto API** | `backend/src/lib/portal-auth.ts`<br>`backend/src/lib/stripe.ts` | MDN Web Docs | <https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API> |
 | **UK Statutory Interest** | `backend/src/lib/statutory-interest.ts` | UK Legislation.gov.uk | <https://www.legislation.gov.uk/ukpga/1998/20/contents> |
 | **GitHub Actions & CI/CD** | `.github/workflows/` | GitHub Docs | <https://docs.github.com/en/actions> |
+| **Antigravity & Agent Workflows** | `.agents/`, `.dev.vars`, skills, rules | Google Antigravity Docs | <https://antigravity.google/docs/> (mirror `.md`) |
 
 ---
 

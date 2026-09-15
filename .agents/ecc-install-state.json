@@ -1,6 +1,6 @@
 {
   "schemaVersion": "ecc.install.v1",
-  "installedAt": "2026-09-14T00:09:31.666Z",
+  "installedAt": "2026-09-15T04:04:36.359Z",
   "target": {
     "id": "antigravity-project",
     "target": "antigravity",
@@ -33,7 +33,7 @@
   },
   "source": {
     "repoVersion": "2.2.1",
-    "repoCommit": "c9148d0bb239ed01a95724a5928b98cdf9c30658",
+    "repoCommit": "8321021c54d670126ce3b2969d5deb880b4b0c2a",
     "manifestVersion": 1
   },
   "operations": [
@@ -4503,7 +4503,7 @@
       "strategy": "preserve-relative-path",
       "ownership": "managed",
       "scaffoldOnly": false,
-      "contentSha256": "a6eb9a96b92dfd4a700bceff15195ca1fd4b7fad2944bb014c08812d1a0dc8b0"
+      "contentSha256": "c42e96155783a44a50f13ab63e9d7f33c9d03b7a1f30777ef434401469c1630a"
     },
     {
       "kind": "copy-file",
@@ -4800,7 +4800,7 @@
       "strategy": "preserve-relative-path",
       "ownership": "managed",
       "scaffoldOnly": false,
-      "contentSha256": "b99640c99ebf5f094c901644fc0f3125f9dead756b9a0c3b6b3593f53dfea2f9"
+      "contentSha256": "6a8fae5d958ff9b6bdf97c7d9217fdf0b2ec9196f61d125bac0a71468f7d44d0"
     },
     {
       "kind": "copy-file",
@@ -5626,6 +5626,17 @@
       "ownership": "managed",
       "scaffoldOnly": false,
       "contentSha256": "d34cfc7114b4479cac2b802f2463c39312cbab4a509313128cb83ac12a1b1eb6"
+    },
+    {
+      "kind": "copy-file",
+      "moduleId": "framework-language",
+      "sourcePath": "C:\\Users\\bossm\\.claude\\plugins\\marketplaces\\ecc\\skills\\rails-patterns\\SKILL.md",
+      "sourceRelativePath": "skills\\rails-patterns\\SKILL.md",
+      "destinationPath": "D:\\Dev\\Workspaces\\Active\\invoice-rescue\\.agents\\skills\\rails-patterns\\SKILL.md",
+      "strategy": "preserve-relative-path",
+      "ownership": "managed",
+      "scaffoldOnly": false,
+      "contentSha256": "914ab8d9d907da06436a512180a65660fbb5d94cd04f56426e3b87a42357acd1"
     }
   ]
 }

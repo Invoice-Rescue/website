@@ -15,11 +15,11 @@ describe("stripe webhook signature verification", () => {
       false,
       ["sign"],
     );
-    const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(`${timestampSeconds}.${body}`));
+    const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(`${ timestampSeconds }.${ body }`));
     const hex = Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
-    return `t=${timestampSeconds},v1=${hex}`;
+    return `t=${ timestampSeconds },v1=${ hex }`;
   }
 
   test("accepts valid webhook signature within 5 minute tolerance window", async () => {
@@ -45,7 +45,7 @@ describe("stripe webhook signature verification", () => {
     const isAlteredPayloadValid = await verifyWebhookSignature(payload + " ", header, webhookSecret);
     assert.strictEqual(isAlteredPayloadValid, false);
 
-    const badSigHeader = `t=${now},v1=0000000000000000000000000000000000000000000000000000000000000000`;
+    const badSigHeader = `t=${ now },v1=0000000000000000000000000000000000000000000000000000000000000000`;
     const isBadSigValid = await verifyWebhookSignature(payload, badSigHeader, webhookSecret);
     assert.strictEqual(isBadSigValid, false);
   });
