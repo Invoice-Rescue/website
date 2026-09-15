@@ -6,6 +6,12 @@
 # charset explicitly so rendering isn't dependent on the client guessing right.
 # Ref: https://developers.cloudflare.com/workers/static-assets/headers/
 
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
 /
   Content-Type: text/html; charset=utf-8
 
