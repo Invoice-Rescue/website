@@ -25,16 +25,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mcgyver-ai/invoice-rescue-landing.git"
+    "url": "git+https://github.com/Invoice-Rescue/website.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/Mcgyver-ai/invoice-rescue-landing/issues"
+    "url": "https://github.com/Invoice-Rescue/website/issues"
   },
-  "homepage": "https://github.com/Mcgyver-ai/invoice-rescue-landing#readme",
+  "homepage": "https://github.com/Invoice-Rescue/website#readme",
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260826.1",
     "@types/node": "^26.1.1",

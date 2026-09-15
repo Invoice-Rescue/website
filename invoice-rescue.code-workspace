@@ -5,6 +5,38 @@
 		}
 	],
 	"settings": {
-		"markdown.validate.enabled": true
+		"markdown.validate.enabled": true,
+		"npm.packageManager": "npm",
+		"typescript.tsdk": "node_modules/typescript/lib",
+		"typescript.preferences.importModuleSpecifier": "relative",
+		"files.exclude": {
+			"**/.git": true,
+			"**/.wrangler": true,
+			"**/.swarm": true,
+			"**/.claude-flow": true,
+			"**/.hive-mind": true,
+			"**/*.tsbuildinfo"
+		},
+		"search.exclude": {
+			"**/node_modules": true,
+			"**/package-lock.json": true,
+			"**/worker-configuration.d.ts": true,
+			"**/.wrangler": true,
+			"**/.swarm": true,
+			"**/.claude-flow": true,
+			"**/.reports": true
+		},
+		"files.watcherExclude": {
+			"**/node_modules/**": true,
+			"**/.wrangler/**": true,
+			"**/.swarm/**": true,
+			"**/.claude-flow/**": true,
+			"**/.git/**": true
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"davidanson.vscode-markdownlint"
+		]
 	}
 }

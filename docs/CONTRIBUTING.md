@@ -20,8 +20,8 @@ Before getting started, ensure you have the following installed on your machine:
 ### 2.1 Clone and Install
 
 ```bash
-git clone https://github.com/Mcgyver-ai/invoice-rescue-landing.git
-cd invoice-rescue-landing
+git clone https://github.com/Invoice-Rescue/website.git
+cd website
 npm ci
 ```
 
