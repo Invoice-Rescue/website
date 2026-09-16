@@ -1,0 +1,62 @@
+﻿{
+  "$schema": "C:/Users/bossm/.gemini/config/skills/vault-map.schema.json",
+  "target": ".dev.vars",
+  "project": "invoice-rescue",
+  "vars": [
+    {
+      "envKey": "GEMINI_API_KEY",
+      "vaultFile": "Antigravity Gemini API Key.txt",
+      "pattern": "API Key:\\s*(\\S+)"
+    },
+    {
+      "envKey": "OPENROUTER_API_KEY",
+      "vaultFile": "openrouter-API.txt",
+      "pattern": "OPENROUTER_API_KEY=([^\\s]+)"
+    },
+    {
+      "envKey": "STRIPE_SECRET_KEY",
+      "vaultFile": "Stripe-Invoice-Rescue_API.txt",
+      "pattern": "Secret Test:\\s*(sk_test_\\S+)"
+    },
+    {
+      "envKey": "STRIPE_SECRET_TEST_KEY",
+      "vaultFile": "Stripe-Invoice-Rescue_API.txt",
+      "pattern": "Secret Test:\\s*(sk_test_\\S+)"
+    },
+    {
+      "envKey": "STRIPE_PUBLISHABLE_TEST_KEY",
+      "vaultFile": "Stripe-Invoice-Rescue_API.txt",
+      "pattern": "Publishable Test:\\s*(pk_test_\\S+)"
+    },
+    {
+      "envKey": "STRIPE_WEBHOOK_SECRET",
+      "vaultFile": "Stripe-Invoice-Rescue_API.txt",
+      "pattern": "Webhook:\\s*(whsec_\\S+)"
+    },
+    {
+      "envKey": "STRIPE_WEBHOOK_SECRET_TEST",
+      "vaultFile": "Stripe-Invoice-Rescue_API.txt",
+      "pattern": "Webhook:\\s*(whsec_\\S+)"
+    },
+    {
+      "envKey": "ADMIN_SECRET",
+      "vaultFile": "Invoice-Rescue-Admin-Secret.txt"
+    },
+    {
+      "envKey": "PORTAL_SESSION_SECRET",
+      "vaultFile": "invoice-rescue-portal-session.txt"
+    },
+    {
+      "envKey": "ACCESS_KEY_ID",
+      "vaultFile": "invoice-rescue-r2-access-key-id.txt"
+    },
+    {
+      "envKey": "SECRET_ACCESS_KEY",
+      "vaultFile": "invoice-rescue-r2-secret-access-key.txt"
+    },
+    {
+      "envKey": "S3_ENDPOINT",
+      "vaultFile": "invoice-rescue-r2-endpoint.txt"
+    }
+  ]
+}
