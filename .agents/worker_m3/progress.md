@@ -1,0 +1,49 @@
+# Progress — Worker M3
+
+Last visited: 2026-09-16T08:17:00Z
+
+- [x] Received dispatch instructions and initialized workspace (DISPATCH.md, BRIEFING.md, progress.md)
+- [x] Read mandatory input documents:
+  - ORIGINAL_REQUEST.md
+  - PROJECT.md
+  - explorer_m3_portal_api/report.md & handoff.md
+  - explorer_m3_frontend_wiring/report.md & handoff.md
+  - spec_miner_m3_review_queue/report.md & handoff.md
+- [x] Inspected existing backend code and existing test patterns:
+  - `backend/src/index.ts`
+  - `backend/src/types/core.ts`
+  - `backend/src/lib/statutory-interest.ts`
+  - `backend/src/lib/tenant-repo.ts`
+  - `backend/src/lib/portal-auth.ts`
+  - `frontend/dashboard/js/dashboard.js`
+  - `tests/e2e/harness.ts`
+- [x] Implemented `backend/src/lib/portal-api.ts`:
+  - `handlePortalDashboardData`
+  - `handlePortalDebtors`
+  - `handleGetDrafts`
+  - `handleApproveDraft`
+  - `handleSkipDraft`
+  - `handleUpdateDraft`
+  - Strict tenant isolation, locked sender model (`hello@invoicerescue.co.uk`), zero external dependencies
+- [x] Mounted routes in `backend/src/index.ts`:
+  - `GET /api/portal/dashboard-data`
+  - `GET /api/portal/debtors`
+  - `GET /api/admin/drafts` & `GET /api/chase/queue`
+  - `POST /api/admin/drafts/:id/approve` & `POST /api/chase/:id/approve`
+  - `POST /api/admin/drafts/:id/skip` & `POST /api/chase/:id/skip`
+  - `PUT /api/admin/drafts/:id` & `PUT /api/chase/:id`
+- [x] Enhanced `frontend/dashboard/js/dashboard.js`:
+  - Added unified `apiFetch` with 3-tier fallback to session storage and seeded defaults
+  - Connected overview dashboard metrics & aging gauge to `/api/portal/dashboard-data`
+  - Connected debtor table to `/api/portal/debtors`
+  - Connected draft approval queue to `/api/admin/drafts`
+  - Added WCAG 2.2 AA fixes: keyboard sort on `th.sortable`, dynamic `aria-valuetext` on `.aging-gauge`, focus restoration to edit toggle button
+  - Preserved dual-theme switching and 150ms debounced search
+- [x] Created comprehensive test suite in `tests/portal-endpoints.test.ts`:
+  - 27 test cases covering all 6 endpoints, statutory calculations, email sending, skip/update actions, multi-column sort, search, pagination, and tenant isolation
+- [x] Verified quality gates:
+  - `npx tsc --noEmit` -> 0 errors
+  - `npm test` -> 403 tests passing (100% pass across 82 suites)
+  - `npm run build` -> clean dry-run bundle
+  - `npx wrangler d1 migrations apply invoice-rescue-db --local` -> clean
+- [ ] Write `handoff.md` and notify parent.

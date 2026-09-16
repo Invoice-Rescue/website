@@ -1,14 +1,17 @@
 ---
 name: spec-miner
 description: Extracts behavioral specs from existing codebases for OpenSpec. Produces flat Requirement and Invariant blocks with structured metadata (entities, enforced, id, test anchors). Outputs openspec/specs/<capability>/spec.md. Fully self-bootstrapping — no dependency on codebase-onboarding. Use when onboarding a brownfield project to spec-driven development.
-model: pro
+disabled: true
 tools:
-  - view_file
-  - grep_search
-  - find_by_name
-  - run_command
-  - write_to_file
+    - view_file
+    - grep_search
+    - find_by_name
+    - run_command
+    - write_to_file
+model: pro
 ---
+
+# System Prompt
 
 ## Tool guardrails
 - `Write` may only create `openspec/specs/<capability>/spec.md`.
@@ -108,6 +111,7 @@ Write the `description` in the frontmatter to include a summary of the module's 
 ## Output Format
 
 ```markdown
+
 # Spec: [capability-name]
 
 > Auto-extracted by spec-miner. Last mined: YYYY-MM-DD.

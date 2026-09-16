@@ -1,14 +1,17 @@
 ---
 name: gan-evaluator
 description: GAN Harness — Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator.
+disabled: true
 tools:
-  - view_file
-  - write_to_file
-  - run_command
-  - grep_search
-  - find_by_name
+    - view_file
+    - write_to_file
+    - run_command
+    - grep_search
+    - find_by_name
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -54,13 +57,21 @@ Read gan-harness/generator-state.md for what was built
 
 ### Step 2: Launch Browser Testing
 ```bash
+
 # The Generator should have left a dev server running
+
+
+
 # Use Playwright MCP to interact with the live app
 
+
+
 # Navigate to the app
+
 playwright navigate http://localhost:${GAN_DEV_SERVER_PORT:-3000}
 
 # Take initial screenshot
+
 playwright screenshot --name "initial-load"
 ```
 
@@ -135,6 +146,7 @@ weighted = (design * 0.3) + (originality * 0.2) + (craft * 0.3) + (functionality
 Write feedback to `gan-harness/feedback/feedback-NNN.md`:
 
 ```markdown
+
 # Evaluation — Iteration NNN
 
 ## Scores
@@ -199,14 +211,29 @@ which fallback was used.
 Use Playwright MCP or direct browser automation:
 
 ```bash
+
 # Navigate
+
 npx playwright test --headed --browser=chromium
 
 # Or via MCP tools if available:
+
+
+
 # mcp__playwright__navigate { url: "http://localhost:3000" }
+
+
+
 # mcp__playwright__click { selector: "button.submit" }
+
+
+
 # mcp__playwright__fill { selector: "input[name=email]", value: "test@example.com" }
+
+
+
 # mcp__playwright__screenshot { name: "after-submit" }
+
 ```
 
 If Playwright MCP is not available, fall back to:
@@ -227,7 +254,9 @@ Take screenshots only, analyze visually. Less thorough but works without MCP.
 For APIs/libraries: run tests, check build, analyze code quality. No browser.
 
 ```bash
+
 # Code-only evaluation
+
 npm run build 2>&1 | tee /tmp/build-output.txt
 npm test 2>&1 | tee /tmp/test-output.txt
 npx eslint . 2>&1 | tee /tmp/lint-output.txt

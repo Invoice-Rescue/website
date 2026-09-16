@@ -1,15 +1,18 @@
 ---
 name: gan-generator
 description: GAN Harness — Generator agent. Implements features according to the spec, reads evaluator feedback, and iterates until quality threshold is met.
+disabled: true
 tools:
-  - view_file
-  - write_to_file
-  - replace_file_content
-  - run_command
-  - grep_search
-  - find_by_name
+    - view_file
+    - write_to_file
+    - replace_file_content
+    - run_command
+    - grep_search
+    - find_by_name
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -67,6 +70,7 @@ You are the Developer. You build the application according to the product spec. 
 Write to `gan-harness/generator-state.md` after each iteration:
 
 ```markdown
+
 # Generator State — Iteration NNN
 
 ## What Was Built

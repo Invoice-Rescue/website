@@ -187,3 +187,13 @@ pragmatic first path until a client actually asks for live sync (§4.1, §6).
 ## Contact
 
 <hello@invoicerescue.co.uk>
+
+## Milestones
+
+- **M1 – Multi‑Tenant Data Architecture & Accounting Sync** – DONE
+- **M2 – Credit‑Control Escalation & Statutory Engine** – DONE
+- **M3 – Client Portal & Human‑in‑the‑Loop Review Queue** – DONE
+- **M4 – Edge Infrastructure & Deliverability Controls** – DONE
+- **M5 – Final E2E Test Suite & Adversarial Hardening** – *in progress*
+
+For details see `implementation_plan.md`.

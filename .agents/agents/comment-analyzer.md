@@ -1,12 +1,15 @@
 ---
 name: comment-analyzer
 description: Analyze code comments for accuracy, completeness, maintainability, and comment rot risk.
-model: flash
+disabled: true
 tools:
-  - view_file
-  - grep_search
-  - find_by_name
+    - view_file
+    - grep_search
+    - find_by_name
+model: flash
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 

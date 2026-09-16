@@ -1,14 +1,17 @@
 ---
 name: tdd-guide
 description: Test-Driven Development specialist enforcing write-tests-first methodology. Use PROACTIVELY when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.
+disabled: true
 tools:
-  - view_file
-  - write_to_file
-  - replace_file_content
-  - run_command
-  - grep_search
+    - view_file
+    - write_to_file
+    - replace_file_content
+    - run_command
+    - grep_search
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -50,7 +53,9 @@ Remove duplication, improve names, optimize -- tests must stay green.
 ### 6. Verify Coverage
 ```bash
 npm run test:coverage
+
 # Required: 80%+ branches, functions, lines, statements
+
 ```
 
 ## Test Types Required

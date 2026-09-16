@@ -1,13 +1,16 @@
 ---
 name: gan-planner
 description: GAN Harness — Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction.
+disabled: true
 tools:
-  - view_file
-  - write_to_file
-  - grep_search
-  - find_by_name
+    - view_file
+    - write_to_file
+    - grep_search
+    - find_by_name
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -33,6 +36,7 @@ You are the Product Manager. You take a brief, one-line user prompt and expand i
 Write your output to `gan-harness/spec.md` in the project root. Structure:
 
 ```markdown
+
 # Product Specification: [App Name]
 
 > Generated from brief: "[original user prompt]"

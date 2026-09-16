@@ -59,9 +59,7 @@
  */
 
 import { parseCsv } from "./lib/csv";
-import { fixedCompensationPence, statutoryInterestPence } from "./lib/statutory-interest";
-import { nextStepDue, STEP_LABELS, type ChaseHistoryRow } from "./lib/escalation";
-import { buildChasePrompt, draftChaseMessage } from "./lib/gemini";
+import { runOverdueDetection } from "./lib/chase-runner";
 import { renderReviewQueue, type DraftRow } from "./lib/admin";
 import {
   signLoginToken,
@@ -79,6 +77,35 @@ import {
   type PortalInvoiceRow,
   type PortalChaseRow,
 } from "./lib/portal";
+import {
+  generateOAuthState,
+  verifyOAuthState,
+  buildAuthorizationUrl,
+  exchangeCodeForTokens,
+  refreshProviderTokens,
+  revokeProviderToken,
+  encryptToken,
+  decryptToken,
+  type TokenExchangeResult,
+} from "./lib/integrations/oauth-manager";
+import {
+  verifyXeroWebhook,
+  verifyQuickBooksWebhook,
+} from "./lib/integrations/webhooks";
+import { SyncService } from "./lib/integrations/sync-service";
+import {
+  recordAccountingWebhook,
+  resolveClientByAccountingTenant,
+  upsertTenantInvoice,
+} from "./lib/tenant-repo";
+import {
+  handlePortalDashboardData,
+  handlePortalDebtors,
+  handleGetDrafts,
+  handleApproveDraft,
+  handleSkipDraft,
+  handleUpdateDraft,
+} from "./lib/portal-api";
 
 // Env is the ambient global interface generated into worker-configuration.d.ts by
 // `npx wrangler types` (see package.json's "types" script) — it already declares
@@ -165,6 +192,39 @@ export default {
         return await handleBillingWebhook(request, env);
       }
 
+      if (request.method === "POST" && path === "/api/webhooks/xero") {
+        return await handleXeroWebhook(request, env);
+      }
+
+      if (request.method === "POST" && path === "/api/webhooks/quickbooks") {
+        return await handleQuickBooksWebhook(request, env);
+      }
+
+      const oauthConnectMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/connect$/);
+      if (request.method === "GET" && oauthConnectMatch) {
+        return await handleOAuthConnect(request, env, oauthConnectMatch[1] as 'xero' | 'quickbooks');
+      }
+
+      const oauthCallbackMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/callback$/);
+      if (request.method === "GET" && oauthCallbackMatch) {
+        return await handleOAuthCallback(request, env, oauthCallbackMatch[1] as 'xero' | 'quickbooks');
+      }
+
+      const oauthRefreshMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/refresh$/);
+      if (request.method === "POST" && oauthRefreshMatch) {
+        return await handleOAuthRefresh(request, env, oauthRefreshMatch[1] as 'xero' | 'quickbooks');
+      }
+
+      const oauthDisconnectMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/disconnect$/);
+      if (request.method === "POST" && oauthDisconnectMatch) {
+        return await handleOAuthDisconnect(request, env, oauthDisconnectMatch[1] as 'xero' | 'quickbooks');
+      }
+
+      const oauthStatusMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/status$/);
+      if (request.method === "GET" && oauthStatusMatch) {
+        return await handleOAuthStatus(request, env, oauthStatusMatch[1] as 'xero' | 'quickbooks');
+      }
+
       if (request.method === "GET" && path === "/portal") {
         return await handlePortalLoginPage(request, env);
       }
@@ -209,14 +269,31 @@ export default {
         return requireAdminAuth(request, env) ?? (await handleAdminReviewQueue(env));
       }
 
-      const approveMatch = path.match(/^\/api\/chase\/(\d+)\/approve$/);
-      if (request.method === "POST" && approveMatch) {
-        return requireAdminAuth(request, env) ?? (await handleChaseApprove(request, env, approveMatch[1]));
+      if (request.method === "GET" && path === "/api/portal/dashboard-data") {
+        return await handlePortalDashboardData(request, env);
       }
 
-      const skipMatch = path.match(/^\/api\/chase\/(\d+)\/skip$/);
+      if (request.method === "GET" && path === "/api/portal/debtors") {
+        return await handlePortalDebtors(request, env);
+      }
+
+      if (request.method === "GET" && (path === "/api/admin/drafts" || path === "/api/chase/queue")) {
+        return await handleGetDrafts(request, env);
+      }
+
+      const approveMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)\/approve$/);
+      if (request.method === "POST" && approveMatch) {
+        return await handleApproveDraft(request, env, approveMatch[1]);
+      }
+
+      const skipMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)\/skip$/);
       if (request.method === "POST" && skipMatch) {
-        return requireAdminAuth(request, env) ?? (await handleChaseSkip(request, env, skipMatch[1]));
+        return await handleSkipDraft(request, env, skipMatch[1]);
+      }
+
+      const updateMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)$/);
+      if (request.method === "PUT" && updateMatch) {
+        return await handleUpdateDraft(request, env, updateMatch[1]);
       }
 
       return new Response("Not found", { status: 404, headers: SECURITY_HEADERS });
@@ -232,6 +309,7 @@ export default {
 
   async scheduled(event: ScheduledController, env: Env): Promise<void> {
     if (event.cron === "0 6 * * *") {
+      await pollActiveAccountingProviders(env);
       await runOverdueDetection(env);
     } else if (event.cron === "0 8 * * FRI") {
       await runFridayReport(env);
@@ -431,22 +509,16 @@ async function handleInvoiceImport(request: Request, env: Env, clientIdParam: st
       errors.push(`Row ${i + 2}: missing or invalid required field (debtor_name, invoice_number, amount, due_date).`);
       continue;
     }
-    await env.DB.prepare(
-      `INSERT INTO invoices
-         (client_id, debtor_name, debtor_email, invoice_number, amount_pence, currency, issued_date, due_date, status, external_id, last_synced_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'overdue', NULL, datetime('now'))`,
-    )
-      .bind(
-        clientId,
-        debtorName,
-        str(row.debtor_email, 200) || null,
-        invoiceNumber,
-        Math.round(amount * 100),
-        str(row.currency, 10) || "GBP",
-        row.issued_date?.trim() || null,
-        dueDate,
-      )
-      .run();
+    await upsertTenantInvoice(env.DB, clientId, {
+      debtorName,
+      debtorEmail: str(row.debtor_email, 200) || null,
+      invoiceNumber,
+      amountPence: Math.round(amount * 100),
+      currency: str(row.currency, 10) || "GBP",
+      issuedDate: row.issued_date?.trim() || null,
+      dueDate,
+      status: "overdue",
+    });
     imported++;
   }
 
@@ -466,73 +538,6 @@ async function handleAdminReviewQueue(env: Env): Promise<Response> {
   return new Response(renderReviewQueue(drafts.results ?? []), {
     headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" },
   });
-}
-
-async function handleChaseApprove(request: Request, env: Env, chaseIdParam: string): Promise<Response> {
-  const chaseId = Number(chaseIdParam);
-  const row = await env.DB.prepare(
-    `SELECT cl.id, cl.body, cl.subject, i.debtor_email, i.invoice_number
-     FROM chase_log cl JOIN invoices i ON i.id = cl.invoice_id
-     WHERE cl.id = ?1 AND cl.status = 'draft'`,
-  )
-    .bind(chaseId)
-    .first<{ id: number; body: string | null; subject: string | null; debtor_email: string | null; invoice_number: string }>();
-
-  if (!row) {
-    return Response.json(
-      { ok: false, error: "Draft not found or already reviewed." },
-      { status: 404, headers: SECURITY_HEADERS },
-    );
-  }
-  if (!row.debtor_email) {
-    return Response.json(
-      { ok: false, error: "Invoice has no debtor email on file." },
-      { status: 422, headers: SECURITY_HEADERS },
-    );
-  }
-
-  // The review queue's textarea lets the operator edit the draft before sending.
-  let body = row.body ?? "";
-  const contentType = request.headers.get("Content-Type") ?? "";
-  if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
-    const form = await request.formData();
-    const edited = form.get("body");
-    if (typeof edited === "string" && edited.trim()) body = edited;
-  }
-
-  await env.SEND.send({
-    to: row.debtor_email,
-    from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
-    subject: row.subject ?? `Re: Invoice ${row.invoice_number}`,
-    text: body,
-  });
-
-  await env.DB.prepare(
-    `UPDATE chase_log SET status = 'sent', body = ?2, outcome = 'sent', reviewed_at = datetime('now'), reviewed_by = ?3 WHERE id = ?1`,
-  )
-    .bind(chaseId, body, env.OPERATOR_NAME)
-    .run();
-
-  return adminActionResponse(request);
-}
-
-async function handleChaseSkip(request: Request, env: Env, chaseIdParam: string): Promise<Response> {
-  const chaseId = Number(chaseIdParam);
-  await env.DB.prepare(
-    `UPDATE chase_log SET status = 'skipped', reviewed_at = datetime('now') WHERE id = ?1 AND status = 'draft'`,
-  )
-    .bind(chaseId)
-    .run();
-  return adminActionResponse(request);
-}
-
-/** JSON for fetch clients; redirect back to the review queue for plain HTML form posts. */
-function adminActionResponse(request: Request): Response {
-  const accepts = request.headers.get("Accept") ?? "";
-  if (accepts.includes("application/json")) {
-    return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
-  }
-  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
 }
 
 async function handleHealth(env: Env): Promise<Response> {
@@ -751,84 +756,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
   return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
 }
 
-interface OverdueInvoiceRow {
-  id: number;
-  client_id: number;
-  debtor_name: string;
-  debtor_email: string | null;
-  invoice_number: string;
-  amount_pence: number;
-  currency: string;
-  due_date: string;
-  days_overdue: number;
-  company_name: string;
-  voice_notes: string | null;
-}
-
-/** Cron: draft the next escalation step for every invoice that's due for one. */
-async function runOverdueDetection(env: Env): Promise<void> {
-  const overdue = await env.DB.prepare(
-    `SELECT i.id, i.client_id, i.debtor_name, i.debtor_email, i.invoice_number, i.amount_pence, i.currency, i.due_date,
-            CAST(julianday('now') - julianday(i.due_date) AS INTEGER) AS days_overdue,
-            c.company_name, c.voice_notes
-     FROM invoices i JOIN clients c ON c.id = i.client_id
-     WHERE i.status = 'overdue' AND i.due_date < date('now')`,
-  ).all<OverdueInvoiceRow>();
-
-  const boeBaseRatePercent = Number(env.BOE_BASE_RATE_PERCENT);
-
-  for (const inv of overdue.results ?? []) {
-    const history = await env.DB.prepare(`SELECT step FROM chase_log WHERE invoice_id = ?1`)
-      .bind(inv.id)
-      .all<ChaseHistoryRow>();
-
-    const step = nextStepDue(inv.days_overdue, history.results ?? []);
-    if (step === null) continue;
-
-    const interest = statutoryInterestPence(inv.amount_pence, inv.days_overdue, boeBaseRatePercent);
-    const compensation = fixedCompensationPence(inv.amount_pence);
-    const prompt = buildChasePrompt({
-      clientVoiceNotes: inv.voice_notes,
-      debtorName: inv.debtor_name,
-      invoiceNumber: inv.invoice_number,
-      amountPence: inv.amount_pence,
-      currency: inv.currency,
-      dueDate: inv.due_date,
-      daysOverdue: inv.days_overdue,
-      step,
-      stepLabel: STEP_LABELS[step],
-      statutoryInterestPence: interest,
-      fixedCompensationPence: compensation,
-    });
-
-    let body: string;
-    try {
-      body = await draftChaseMessage(env.GEMINI_API_KEY, prompt);
-    } catch (err) {
-      console.error(`Gemini draft failed for invoice ${inv.id}:`, err);
-      continue;
-    }
-
-    await env.DB.prepare(
-      `INSERT INTO chase_log (invoice_id, step, channel, subject, outcome, status, body)
-       VALUES (?1, ?2, 'email', ?3, NULL, 'draft', ?4)`,
-    )
-      .bind(inv.id, step, `Re: Invoice ${inv.invoice_number}`, body)
-      .run();
-  }
-
-  const draftCount = await env.DB.prepare(`SELECT COUNT(*) AS n FROM chase_log WHERE status = 'draft'`).first<{
-    n: number;
-  }>();
-  if (draftCount && draftCount.n > 0) {
-    await env.NOTIFY.send({
-      to: env.NOTIFY_TO,
-      from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
-      subject: `Invoice Rescue: ${draftCount.n} chase draft(s) ready for review`,
-      text: `${draftCount.n} chase message(s) are waiting for your review at /admin.`,
-    });
-  }
-}
+export { runOverdueDetection };
 
 interface ClientRow {
   id: number;
@@ -884,6 +812,433 @@ async function runFridayReport(env: Env): Promise<void> {
       });
     } catch (err) {
       console.error(`Friday report delivery failed for client ${client.id} (${client.company_name}):`, err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OAuth 2.0 Endpoints (Xero & QuickBooks)
+// ---------------------------------------------------------------------------
+
+async function handleOAuthConnect(
+  request: Request,
+  env: Env,
+  provider: 'xero' | 'quickbooks'
+): Promise<Response> {
+  const jsonHeaders = { ...SECURITY_HEADERS, "Content-Type": "application/json" };
+  const url = new URL(request.url);
+  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+
+  if (clientId === null && requireAdminAuth(request, env) === null) {
+    const clientParam = url.searchParams.get("client_id");
+    if (clientParam) {
+      const parsed = Number(clientParam);
+      if (Number.isInteger(parsed) && parsed > 0) {
+        const client = await env.DB.prepare("SELECT id FROM clients WHERE id = ?1").bind(parsed).first();
+        if (client) {
+          clientId = parsed;
+        }
+      }
+    }
+  }
+
+  if (clientId === null) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: jsonHeaders,
+    });
+  }
+
+  const returnTo = url.searchParams.get("return_to") || "/portal/dashboard";
+  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const state = await generateOAuthState({ cid: clientId, p: provider, ret: returnTo }, encryptionSecret, 600);
+
+  const redirectUri = `${url.origin}/api/oauth/${provider}/callback`;
+  const appClientId = provider === 'xero'
+    ? ((env as any).XERO_CLIENT_ID || 'mock_xero_client_id')
+    : ((env as any).QUICKBOOKS_CLIENT_ID || 'mock_qb_client_id');
+
+  const authUrl = buildAuthorizationUrl(provider, appClientId, redirectUri, state);
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...SECURITY_HEADERS,
+      Location: authUrl,
+    },
+  });
+}
+
+async function handleOAuthCallback(
+  request: Request,
+  env: Env,
+  provider: 'xero' | 'quickbooks'
+): Promise<Response> {
+  const url = new URL(request.url);
+
+  const error = url.searchParams.get("error");
+  if (error) {
+    const errorDesc = url.searchParams.get("error_description") || error;
+    return Response.json(
+      { ok: false, error: `OAuth authorization failed: ${errorDesc}` },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  const state = url.searchParams.get("state") || "";
+  const code = url.searchParams.get("code") || "";
+
+  if (!code) {
+    return Response.json(
+      { ok: false, error: "Missing authorization code." },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const statePayload = await verifyOAuthState(state, encryptionSecret, provider);
+  if (!statePayload) {
+    return Response.json(
+      { ok: false, error: "Invalid or expired OAuth state parameter." },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  const redirectUri = `${url.origin}/api/oauth/${provider}/callback`;
+  const clientCreds = provider === 'xero'
+    ? { clientId: (env as any).XERO_CLIENT_ID || 'mock_xero_client_id', clientSecret: (env as any).XERO_CLIENT_SECRET || 'mock_secret' }
+    : { clientId: (env as any).QUICKBOOKS_CLIENT_ID || 'mock_qb_client_id', clientSecret: (env as any).QUICKBOOKS_CLIENT_SECRET || 'mock_secret' };
+
+  const realmId = url.searchParams.get("realmId");
+
+  let exchangeResult: TokenExchangeResult;
+  try {
+    exchangeResult = await exchangeCodeForTokens(provider, code, redirectUri, clientCreds, realmId);
+  } catch (err: any) {
+    return Response.json(
+      { ok: false, error: `Failed to exchange authorization code: ${err.message}` },
+      { status: 502, headers: SECURITY_HEADERS }
+    );
+  }
+
+  const accessEncrypted = await encryptToken(exchangeResult.accessToken, encryptionSecret);
+  const refreshEncrypted = await encryptToken(exchangeResult.refreshToken, encryptionSecret);
+  const expiresAt = new Date(Date.now() + exchangeResult.expiresIn * 1000).toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO accounting_connections (
+       client_id, provider, tenant_id, access_token_encrypted,
+       refresh_token_encrypted, expires_at, status, last_synced_at, created_at
+     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', NULL, datetime('now'))
+     ON CONFLICT(client_id, provider) DO UPDATE SET
+       tenant_id = excluded.tenant_id,
+       access_token_encrypted = excluded.access_token_encrypted,
+       refresh_token_encrypted = excluded.refresh_token_encrypted,
+       expires_at = excluded.expires_at,
+       status = 'active'`
+  ).bind(
+    statePayload.cid,
+    provider,
+    exchangeResult.tenantId,
+    accessEncrypted,
+    refreshEncrypted,
+    expiresAt
+  ).run();
+
+  await env.DB.prepare(`UPDATE clients SET accounting_source = ?2 WHERE id = ?1`)
+    .bind(statePayload.cid, provider)
+    .run();
+
+  const accepts = request.headers.get("Accept") || "";
+  if (accepts.includes("application/json")) {
+    return Response.json({ ok: true, provider, connected: true }, { headers: SECURITY_HEADERS });
+  }
+
+  return new Response(null, {
+    status: 303,
+    headers: {
+      ...SECURITY_HEADERS,
+      Location: `${statePayload.ret}?connected=${provider}`,
+    },
+  });
+}
+
+async function handleOAuthRefresh(
+  request: Request,
+  env: Env,
+  provider: 'xero' | 'quickbooks'
+): Promise<Response> {
+  const jsonHeaders = { ...SECURITY_HEADERS, "Content-Type": "application/json" };
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId === null && requireAdminAuth(request, env) === null) {
+    if (typeof body.client_id === 'number' && Number.isInteger(body.client_id) && body.client_id > 0) {
+      clientId = body.client_id;
+    }
+  }
+
+  if (clientId === null) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
+  }
+
+  const conn = await env.DB.prepare(
+    `SELECT id, refresh_token_encrypted FROM accounting_connections WHERE client_id = ?1 AND provider = ?2 AND status = 'active'`
+  ).bind(clientId, provider).first<{ id: number; refresh_token_encrypted: string }>();
+
+  if (!conn) {
+    return Response.json({ ok: false, error: "No active connection found." }, { status: 404, headers: SECURITY_HEADERS });
+  }
+
+  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const clientCreds = provider === 'xero'
+    ? { clientId: (env as any).XERO_CLIENT_ID || 'mock_xero_client_id', clientSecret: (env as any).XERO_CLIENT_SECRET || 'mock_secret' }
+    : { clientId: (env as any).QUICKBOOKS_CLIENT_ID || 'mock_qb_client_id', clientSecret: (env as any).QUICKBOOKS_CLIENT_SECRET || 'mock_secret' };
+
+  try {
+    const refreshToken = await decryptToken(conn.refresh_token_encrypted, encryptionSecret);
+    const refreshed = await refreshProviderTokens(provider, refreshToken, clientCreds);
+    const newAccessEncrypted = await encryptToken(refreshed.accessToken, encryptionSecret);
+    const newRefreshEncrypted = await encryptToken(refreshed.refreshToken, encryptionSecret);
+    const newExpiresAt = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString();
+
+    await env.DB.prepare(
+      `UPDATE accounting_connections
+       SET access_token_encrypted = ?1,
+           refresh_token_encrypted = ?2,
+           expires_at = ?3,
+           status = 'active',
+           last_synced_at = datetime('now')
+       WHERE id = ?4`
+    ).bind(newAccessEncrypted, newRefreshEncrypted, newExpiresAt, conn.id).run();
+
+    return Response.json({ ok: true, refreshed: true, provider }, { headers: SECURITY_HEADERS });
+  } catch (err: any) {
+    if (err?.message?.includes("invalid_grant") || err?.message?.includes("revoked")) {
+      await env.DB.prepare(`UPDATE accounting_connections SET status = 'revoked' WHERE id = ?1`).bind(conn.id).run();
+      return Response.json(
+        { ok: false, error: "Accounting authorization has been revoked by user. Re-authentication required." },
+        { status: 401, headers: SECURITY_HEADERS }
+      );
+    }
+    return Response.json(
+      { ok: false, error: `Token refresh failed: ${err.message}` },
+      { status: 502, headers: SECURITY_HEADERS }
+    );
+  }
+}
+
+async function handleOAuthDisconnect(
+  request: Request,
+  env: Env,
+  provider: 'xero' | 'quickbooks'
+): Promise<Response> {
+  const jsonHeaders = { ...SECURITY_HEADERS, "Content-Type": "application/json" };
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId === null && requireAdminAuth(request, env) === null) {
+    if (typeof body.client_id === 'number' && Number.isInteger(body.client_id) && body.client_id > 0) {
+      clientId = body.client_id;
+    }
+  }
+
+  if (clientId === null) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
+  }
+
+  const conn = await env.DB.prepare(
+    `SELECT id, refresh_token_encrypted FROM accounting_connections WHERE client_id = ?1 AND provider = ?2`
+  ).bind(clientId, provider).first<{ id: number; refresh_token_encrypted: string }>();
+
+  if (!conn) {
+    return Response.json({ ok: false, error: "No connection found." }, { status: 404, headers: SECURITY_HEADERS });
+  }
+
+  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const clientCreds = provider === 'xero'
+    ? { clientId: (env as any).XERO_CLIENT_ID || '', clientSecret: (env as any).XERO_CLIENT_SECRET || '' }
+    : { clientId: (env as any).QUICKBOOKS_CLIENT_ID || '', clientSecret: (env as any).QUICKBOOKS_CLIENT_SECRET || '' };
+
+  try {
+    const refreshToken = await decryptToken(conn.refresh_token_encrypted, encryptionSecret);
+    await revokeProviderToken(provider, refreshToken, clientCreds);
+  } catch (err) {
+    console.warn(`External token revocation failed for provider ${provider}:`, err);
+  }
+
+  await env.DB.prepare(`DELETE FROM accounting_connections WHERE id = ?1`).bind(conn.id).run();
+  await env.DB.prepare(
+    `UPDATE clients SET accounting_source = NULL WHERE id = ?1 AND accounting_source = ?2`
+  ).bind(clientId, provider).run();
+
+  return Response.json({ ok: true, disconnected: provider }, { headers: SECURITY_HEADERS });
+}
+
+async function handleOAuthStatus(
+  request: Request,
+  env: Env,
+  provider: 'xero' | 'quickbooks'
+): Promise<Response> {
+  const jsonHeaders = { ...SECURITY_HEADERS, "Content-Type": "application/json" };
+  const url = new URL(request.url);
+  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  if (clientId === null && requireAdminAuth(request, env) === null) {
+    const clientParam = url.searchParams.get("client_id");
+    if (clientParam) {
+      const parsed = Number(clientParam);
+      if (Number.isInteger(parsed) && parsed > 0) {
+        clientId = parsed;
+      }
+    }
+  }
+
+  if (clientId === null) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
+  }
+
+  const conn = await env.DB.prepare(
+    `SELECT provider, tenant_id, expires_at, last_synced_at, status
+     FROM accounting_connections
+     WHERE client_id = ?1 AND provider = ?2`
+  ).bind(clientId, provider).first<{
+    provider: string;
+    tenant_id: string | null;
+    expires_at: string;
+    last_synced_at: string | null;
+    status: string;
+  }>();
+
+  if (!conn) {
+    return Response.json({ ok: true, connected: false, provider }, { headers: SECURITY_HEADERS });
+  }
+
+  return Response.json({
+    ok: true,
+    connected: conn.status === 'active',
+    provider: conn.provider,
+    status: conn.status,
+    tenant_id: conn.tenant_id,
+    expires_at: conn.expires_at,
+    last_synced_at: conn.last_synced_at,
+  }, { headers: SECURITY_HEADERS });
+}
+
+// ---------------------------------------------------------------------------
+// Cryptographic Webhooks (Xero & QuickBooks)
+// ---------------------------------------------------------------------------
+
+async function handleXeroWebhook(request: Request, env: Env): Promise<Response> {
+  const webhookKey = (env as any).XERO_WEBHOOK_KEY || "";
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-xero-signature");
+
+  // Xero ITR Requirement: MUST return HTTP 401 on invalid signature!
+  const isValid = await verifyXeroWebhook(rawBody, signature || "", webhookKey);
+  if (!isValid) {
+    return new Response("Unauthorized", { status: 401, headers: SECURITY_HEADERS });
+  }
+
+  // If empty ITR handshake body, return 200 OK
+  if (!rawBody || rawBody.trim() === "") {
+    return new Response(null, { status: 200, headers: SECURITY_HEADERS });
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(rawBody);
+  } catch {
+    return new Response(null, { status: 200, headers: SECURITY_HEADERS });
+  }
+
+  const events = data.events ?? [];
+  if (events.length === 0) {
+    return new Response(null, { status: 200, headers: SECURITY_HEADERS });
+  }
+
+  const syncService = new SyncService(env.DB, env);
+
+  for (const ev of events) {
+    if (ev.eventCategory !== "INVOICE") continue;
+
+    const eventId = `xero_${ev.tenantId}_${ev.resourceId}_${ev.eventType}_${ev.eventDateUtc}`;
+
+    const isNew = await recordAccountingWebhook(env.DB, eventId, 'xero', ev);
+    if (!isNew) {
+      continue;
+    }
+
+    const clientId = await resolveClientByAccountingTenant(env.DB, 'xero', ev.tenantId);
+    if (clientId !== null) {
+      await syncService.syncSingleInvoice(clientId, "xero", ev.resourceId);
+    }
+  }
+
+  return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
+}
+
+async function handleQuickBooksWebhook(request: Request, env: Env): Promise<Response> {
+  const verifierToken = (env as any).QUICKBOOKS_VERIFIER_TOKEN || "";
+  const rawBody = await request.text();
+  const signature = request.headers.get("intuit-signature");
+
+  const isValid = await verifyQuickBooksWebhook(rawBody, signature || "", verifierToken);
+  if (!isValid) {
+    return Response.json({ ok: false, error: "Invalid signature" }, { status: 401, headers: SECURITY_HEADERS });
+  }
+
+  if (!rawBody || rawBody.trim() === "") {
+    return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(rawBody);
+  } catch {
+    return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
+  }
+
+  const syncService = new SyncService(env.DB, env);
+
+  for (const notification of data.eventNotifications ?? []) {
+    const realmId = notification.realmId;
+    const entities = notification.dataChangeEvent?.entities ?? [];
+
+    for (const entity of entities) {
+      if (entity.name !== "Invoice") continue;
+
+      const eventId = `qb_${realmId}_${entity.name}_${entity.id}_${entity.operation}_${entity.lastUpdated}`;
+
+      const isNew = await recordAccountingWebhook(env.DB, eventId, 'quickbooks', entity);
+      if (!isNew) {
+        continue;
+      }
+
+      const clientId = await resolveClientByAccountingTenant(env.DB, 'quickbooks', realmId);
+      if (clientId !== null) {
+        await syncService.syncSingleInvoice(clientId, "quickbooks", entity.id);
+      }
+    }
+  }
+
+  return Response.json({ ok: true }, { headers: SECURITY_HEADERS });
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled Cron: Accounting Provider Polling
+// ---------------------------------------------------------------------------
+
+async function pollActiveAccountingProviders(env: Env): Promise<void> {
+  const connections = await env.DB.prepare(
+    `SELECT client_id, provider, tenant_id FROM accounting_connections WHERE status = 'active'`
+  ).all<{ client_id: number; provider: 'xero' | 'quickbooks'; tenant_id: string | null }>();
+
+  if (!connections.results || connections.results.length === 0) return;
+
+  const syncService = new SyncService(env.DB, env);
+  for (const conn of connections.results) {
+    try {
+      await syncService.syncInvoices(conn.client_id);
+    } catch (err) {
+      console.error(`Scheduled sync error for client ${conn.client_id} (${conn.provider}):`, err);
     }
   }
 }

@@ -1,15 +1,18 @@
 ---
 name: chief-of-staff
 description: Personal communication chief of staff that triages email, Slack, LINE, and Messenger. Classifies messages into 4 tiers (skip/info_only/meeting_info/action_required), generates draft replies, and enforces post-send follow-through via hooks. Use when managing multi-channel communication workflows.
+disabled: true
 tools:
-  - view_file
-  - grep_search
-  - find_by_name
-  - run_command
-  - replace_file_content
-  - write_to_file
+    - view_file
+    - grep_search
+    - find_by_name
+    - run_command
+    - replace_file_content
+    - write_to_file
 model: pro
 ---
+
+# System Prompt
 
 ## Prompt Defense Baseline
 
@@ -65,17 +68,23 @@ Every message gets classified into exactly one tier, applied in priority order:
 Fetch all channels simultaneously:
 
 ```bash
+
 # Email (via Gmail CLI)
+
 gog gmail search "is:unread -category:promotions -category:social" --max 20 --json
 
 # Calendar
+
 gog calendar events --today --all --max 30
 
 # LINE/Messenger via channel-specific scripts
+
 ```
 
 ```text
+
 # Slack (via MCP)
+
 conversations_search_messages(search_query: "YOUR_NAME", filter_date_during: "Today")
 channels_list(channel_types: "im,mpim") → conversations_history(limit: "4h")
 ```
@@ -120,6 +129,7 @@ This checklist is enforced by a `PostToolUse` hook that blocks completion until 
 ## Briefing Output Format
 
 ```
+
 # Today's Briefing — [Date]
 
 ## Schedule (N)

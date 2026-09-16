@@ -163,18 +163,8 @@
   },
   "permissions": {
     "allow": [
-      "Bash(npx @claude-flow*)",
-      "Bash(npx claude-flow*)",
-      "Bash(node .claude/helpers/hook-handler.cjs*)",
-      "Bash(node .claude/helpers/auto-memory-hook.mjs*)",
-      "Bash(node .claude/helpers/statusline.cjs*)",
       "mcp__claude-flow__*",
-      "Bash(npx tsc*)",
-      "Bash(npm test*)",
-      "Bash(npm run build*)",
-      "Bash(npm run verify*)",
-      "Bash(wrangler deploy --dry-run*)",
-      "Bash(npx wrangler deploy --dry-run*)"
+      "Bash(wrangler deploy --dry-run*)"
     ],
     "deny": [
       "Read(./.env)",

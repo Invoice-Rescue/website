@@ -42,5 +42,8 @@ jobs:
       - name: Run automated test suite
         run: npm test
 
+      - name: Run E2E test suite
+        run: npm run e2e
+
       - name: Verify Cloudflare Worker bundling
         run: npx wrangler deploy --dry-run

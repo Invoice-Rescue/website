@@ -19,7 +19,8 @@
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
     "lint": "npm run lint:md && npm run typecheck",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "npx tsx --test tests/**/*.test.ts",
+    "e2e": "npx playwright test",
     "db:seed": "tsx scripts/seed-local-db.ts",
     "verify": "npm run lint && npm run test && npm run build"
   },
@@ -37,6 +38,7 @@
   "homepage": "https://github.com/Invoice-Rescue/website#readme",
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260826.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.1.1",
     "markdownlint-cli2": "^0.23.2",
     "tsx": "^4.23.13",

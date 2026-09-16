@@ -35,6 +35,12 @@ All library components are preserved in `.agents/_disabled/`:
 | **Mobile & Cross-Platform**| `flutter-*`, `dart-*`, `swift-*`, `react-native-*`, `harmonyos-*` | `_disabled/skills/`, `_disabled/agents/` |
 | **Alternative Web Frameworks**| `react-*`, `vue-*`, `angular-*`, `rails-*`, `ruby-*`, `laravel-*`, `php-*`, `svelte-*`, `tinystruct-*` | `_disabled/skills/`, `_disabled/agents/` |
 | **Network & Infrastructure** | `network-architect`, `network-config-reviewer`, `network-troubleshooter`, `homelab-architect` | `_disabled/agents/` |
+| **React Motion & UI Frameworks**| `motion-advanced`, `motion-foundations`, `motion-patterns`, `motion-ui`, `frontend-patterns`, `frontend-a11y` | `_disabled/skills/` |
+| **Multi-Model Orchestration** | `multi-backend`, `multi-execute`, `multi-frontend`, `multi-plan`, `multi-workflow`, `council`, `ruflo` | `_disabled/skills/` |
+| **Autonomous Loops & GANs** | `loop-start`, `loop-status`, `loop-design-check`, `gan-build`, `gan-design`, `santa-loop`, `santa-method` | `_disabled/skills/` |
+| **Epic & PRP Coordination** | `epic-claim`, `epic-decompose`, `epic-publish`, `epic-review`, `epic-sync`, `prp-*`, `orch-*` | `_disabled/skills/` |
+| **Skill & Config Meta-Tooling** | `skill-stocktake`, `skill-comply`, `skill-health`, `skill-scout`, `config-gc`, `context-budget`, `plankton-*` | `_disabled/skills/` |
+| **External Trackers & Architecture** | `jira`, `continuous-learning`, `council-multi-model`, `setup-pm`, `hexagonal-architecture` | `_disabled/skills/` |
 
 ---
 

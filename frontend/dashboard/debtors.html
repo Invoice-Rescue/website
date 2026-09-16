@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debtors &amp; Invoices — Invoice Rescue</title>
+  <meta name="description" content="Filterable debtor ledger, invoice collection statuses, and statutory escalation stages.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <!-- Accessible Skip Link -->
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <!-- Header & Navigation -->
+  <header class="site-header" role="banner">
+    <div class="layout-container">
+      <div class="header-inner">
+        <div class="brand-group">
+          <a href="index.html" class="brand-link" aria-label="Invoice Rescue Dashboard Home">
+            <span class="brand-logo">Invoice<span>Rescue</span></span>
+          </a>
+          <span class="portal-tag">Client Portal</span>
+        </div>
+
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="index.html" class="nav-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            Overview
+          </a>
+          <a href="debtors.html" class="nav-link active" aria-current="page">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Debtors &amp; Invoices
+          </a>
+          <a href="approval-queue.html" class="nav-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Approval Queue
+            <span class="nav-badge nav-badge-drafts" aria-label="Drafts awaiting review">3</span>
+          </a>
+        </nav>
+
+        <div class="header-actions">
+          <button type="button" id="theme-toggle-btn" class="btn-icon" aria-label="Toggle theme">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+
+          <div class="client-meta">
+            <div class="client-name">Apex Studio Ltd</div>
+            <div class="client-plan">Engine Plan · <a href="/portal/billing" style="color:var(--muted); text-decoration:underline;">Billing</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="main" class="dashboard-main" tabindex="-1">
+    <div class="layout-container">
+      
+      <!-- Page Header -->
+      <section class="page-header" aria-labelledby="page-title-debtors">
+        <div class="page-header-text">
+          <h1 id="page-title-debtors" class="page-title">Debtors &amp; Invoices</h1>
+          <p class="page-subtitle">Track individual debtor accounts, overdue aging, statutory escalation stages, and collection history.</p>
+        </div>
+        <div class="page-actions">
+          <button type="button" id="btn-export-csv" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Ledger CSV
+          </button>
+        </div>
+      </section>
+
+      <!-- Filter & Search Toolbar -->
+      <section class="toolbar-card" aria-label="Debtor search and filter options">
+        <div class="toolbar-grid">
+          <!-- Search Input -->
+          <div class="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <label for="debtor-search" class="sr-only">Search by debtor name or invoice number</label>
+            <input type="search" id="debtor-search" class="search-input" placeholder="Search debtor name or invoice number..." autocomplete="off">
+          </div>
+
+          <!-- Filter Group -->
+          <div class="filter-group">
+            <div>
+              <label for="filter-stage" class="sr-only">Filter by escalation stage</label>
+              <select id="filter-stage" class="select-control">
+                <option value="all">All Escalation Stages</option>
+                <option value="1">Stage 1 (Gentle Reminder)</option>
+                <option value="2">Stage 2 (Follow-up)</option>
+                <option value="3">Stage 3 (Firm Notice)</option>
+                <option value="4">Stage 4 (Final Notice)</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="filter-status" class="sr-only">Filter by invoice status</label>
+              <select id="filter-status" class="select-control">
+                <option value="all">All Statuses</option>
+                <option value="overdue">Overdue</option>
+                <option value="promised">Promised</option>
+                <option value="paid">Paid</option>
+                <option value="disputed">Disputed</option>
+              </select>
+            </div>
+
+            <button type="button" id="btn-reset-filters" class="btn btn-outline btn-sm">
+              Reset Filters
+            </button>
+          </div>
+
+          <!-- Counter indicator -->
+          <div class="results-count-badge" id="table-results-count" aria-live="polite">
+            Loading debtors...
+          </div>
+        </div>
+      </section>
+
+      <!-- Debtor Data Table (WCAG 2.2 AA compliant) -->
+      <section class="table-container" aria-label="Debtor invoices table">
+        <div class="table-scroll-wrapper">
+          <table class="debtor-table">
+            <caption>Aged debtor ledger showing outstanding invoices, escalation stages, and contact timestamps</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="sortable" data-sort="debtor_name" tabindex="0" role="button">
+                  Debtor Name <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
+                <th scope="col" class="sortable" data-sort="invoice_number" tabindex="0" role="button">
+                  Invoice # <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
+                <th scope="col" class="sortable" data-sort="amount_pence" tabindex="0" role="button">
+                  Amount (£) <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
+                <th scope="col" class="sortable" data-sort="due_date" tabindex="0" role="button">
+                  Due Date <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
+                <th scope="col" class="sortable" data-sort="days_overdue" aria-sort="descending" tabindex="0" role="button">
+                  Days Overdue <span class="sort-icon" aria-hidden="true">↓</span>
+                </th>
+                <th scope="col">Escalation Stage</th>
+                <th scope="col">Status</th>
+                <th scope="col">Last Contact</th>
+              </tr>
+            </thead>
+            <tbody id="debtor-table-body" aria-live="polite">
+              <!-- Dynamically populated via dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table Footer -->
+        <div class="table-footer">
+          <span style="font-size:0.82rem; color:var(--muted);">
+            Debtor records auto-synced from your accounting ledger or CSV imports.
+          </span>
+          <div class="pagination-controls">
+            <span style="font-size:0.82rem; color:var(--muted);">Stage cadence: 7d · 14d · 21d</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="layout-container">
+      <div class="footer-inner">
+        <div>
+          &copy; 2026 Invoice Rescue Ltd. All rights reserved. Registered in England &amp; Wales.
+        </div>
+        <div class="footer-links">
+          <a href="/terms">Terms of Service</a>
+          <a href="/privacy">Privacy Notice</a>
+          <a href="mailto:hello@invoicerescue.co.uk">Contact Support</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
