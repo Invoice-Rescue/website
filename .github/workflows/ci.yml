@@ -42,6 +42,15 @@ jobs:
       - name: Run automated test suite
         run: npm test
 
+      - name: Create E2E local secrets file
+        run: printf 'ADMIN_SECRET=ci-e2e-admin-secret\n' > .dev.vars
+
+      - name: Apply local D1 migrations for E2E
+        run: npx wrangler d1 migrations apply invoice-rescue-db --local
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Run E2E test suite
         run: npm run e2e
 
