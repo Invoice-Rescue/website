@@ -8,7 +8,12 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "composite": true
   },
-  "include": ["backend/src", "worker-configuration.d.ts", "tests", "scripts"]
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
 }

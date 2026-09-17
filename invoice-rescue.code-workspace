@@ -15,9 +15,9 @@
 			"**/.swarm": true,
 			"**/.claude-flow": true,
 			"**/.hive-mind": true,
-			"**/*.tsbuildinfo"
+			"**/*.tsbuildinfo": true
 		},
-		"search.exclude": {
+			"search.exclude": {
 			"**/node_modules": true,
 			"**/package-lock.json": true,
 			"**/worker-configuration.d.ts": true,

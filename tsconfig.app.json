@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "ESNext"
+  },
+  "include": ["backend/src", "worker-configuration.d.ts"]
+}
