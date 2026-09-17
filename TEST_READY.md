@@ -1,6 +1,7 @@
 # TEST_READY: Invoice Rescue End-to-End Test Suite
 
 ## Executive Summary
+
 The comprehensive, opaque-box End-to-End (E2E) test suite for the Invoice Rescue Credit-Control SaaS platform has been designed, implemented, and validated. The suite rigorously verifies the entire system against specifications in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_INFRA.md` without modifying any production code.
 
 - **Total Repo Tests**: 306 passing tests (249 E2E tests + 57 unit/integration tests)
@@ -13,16 +14,19 @@ The comprehensive, opaque-box End-to-End (E2E) test suite for the Invoice Rescue
 ## Quick Verification Commands
 
 ### Run Full Test Suite (E2E + Unit Tests)
+
 ```bash
 npm test
 ```
 
 ### Run Dedicated E2E Test Suite Only
+
 ```bash
 npx tsx --test tests/e2e/**/*.test.ts
 ```
 
 ### Run Typecheck / Static Analysis
+
 ```bash
 npm run typecheck
 ```
@@ -32,6 +36,7 @@ npm run typecheck
 ## Test Architecture & Harness
 
 Located in `tests/e2e/harness.ts`:
+
 - **In-Memory D1 SQLite Engine**: Uses Node.js 25's `node:sqlite.DatabaseSync(":memory:")` implementing the full Cloudflare `D1Database` and `D1PreparedStatement` interface (`prepare`, `bind`, `first`, `all`, `run`, `batch`, `exec`).
 - **Automated Schema Migration**: Dynamically executes all production D1 migrations (`0001_initial_schema.sql` through `0006_accounting_connections_and_external_sync.sql`) ensuring strict schema parity with production Cloudflare D1.
 - **Split-Trust Mock Email Bindings**: Intercepts and logs outbound mail for both `NOTIFY` (operator alerts) and `SEND` (debtor reminders, magic links, Friday reports) to independently verify recipient segregation.
@@ -45,6 +50,7 @@ Located in `tests/e2e/harness.ts`:
 ## Test Suite Inventory & Coverage
 
 ### Tier 1: Feature Coverage (`tests/e2e/tier1-features.test.ts`)
+
 - **Coverage**: 110 test cases (5 tests each across all 22 features, F1–F22)
 - **Scope**: Primary functional contracts (happy path) isolated per requirement:
   - F1: Multi-tenant data isolation & separate ledgers
@@ -71,6 +77,7 @@ Located in `tests/e2e/harness.ts`:
   - F22: D1 database schema integrity and foreign key constraints
 
 ### Tier 2: Boundary & Corner Cases (`tests/e2e/tier2-boundaries.test.ts`)
+
 - **Coverage**: 110 test cases (5 boundary tests per feature across F1–F22)
 - **Scope**: Rigorous edge conditions and adversarial inputs:
   - Zero-drift non-compounding interest formulas across leap years (366 days)
@@ -81,6 +88,7 @@ Located in `tests/e2e/harness.ts`:
   - Database schema CHECK constraint violations and SQL injection defenses
 
 ### Tier 3: Pairwise Combinatorial Interactions (`tests/e2e/tier3-pairwise.test.ts`)
+
 - **Coverage**: 24 interaction tests (exceeding ≥22 requirement)
 - **Scope**: Cross-feature interactions and concurrent operations:
   - P1: Payment webhook arrives while draft is pending in review queue -> draft is skipped, invoice marked paid
@@ -109,6 +117,7 @@ Located in `tests/e2e/harness.ts`:
   - P24: Multiple clients with different BOE base rates applied calculates correctly
 
 ### Tier 4: Real-World Application Workload Scenarios (`tests/e2e/tier4-scenarios.test.ts`)
+
 - **Coverage**: 5 comprehensive end-to-end lifecycle scenarios
 - **Scope**: Complete multi-step workflows:
   1. **Multi-Tenant Agency Full Recovery Lifecycle**:
@@ -127,10 +136,10 @@ Located in `tests/e2e/harness.ts`:
 ## Pass/Fail Verification Matrix
 
 | Test Suite | Files | Tests | Pass | Fail | Skip | Duration |
-|------------|-------|:-----:|:----:|:----:|:----:|:--------:|
+| ------------ | ------- | :-----: | :----: | :----: | :----: | :--------: |
 | **Tier 1: Feature Coverage** | `tests/e2e/tier1-features.test.ts` | 110 | 110 | 0 | 0 | ~1.02s |
 | **Tier 2: Boundary & Corners** | `tests/e2e/tier2-boundaries.test.ts` | 110 | 110 | 0 | 0 | ~1.10s |
-| **Tier 3: Pairwise Interactions**| `tests/e2e/tier3-pairwise.test.ts` | 24 | 24 | 0 | 0 | ~0.83s |
+| **Tier 3: Pairwise Interactions** | `tests/e2e/tier3-pairwise.test.ts` | 24 | 24 | 0 | 0 | ~0.83s |
 | **Tier 4: Workload Scenarios** | `tests/e2e/tier4-scenarios.test.ts` | 5 | 5 | 0 | 0 | ~0.81s |
 | **Unit & Integration Suites** | `tests/*.test.ts` | 57 | 57 | 0 | 0 | ~0.32s |
 | **TOTAL** | | **306** | **306** | **0** | **0** | **~4.08s** |
