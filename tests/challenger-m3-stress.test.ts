@@ -1,15 +1,14 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createTestEnv, createBasicAuthHeader } from "./e2e/harness";
-import { buildSessionCookie, signLoginToken } from "../backend/src/lib/portal-auth";
+import { buildSessionCookie } from "../backend/src/lib/portal-auth";
 import worker from "../backend/src/index";
-import { fixedCompensationPence, statutoryInterestPence } from "../backend/src/lib/statutory-interest";
 
 describe("Milestone M3 Stress Suite — Challenger 1 (Portal & Queue Concurrency Stress - R3)", () => {
   // Helper to construct authenticated client session cookie header
   async function createSessionCookie(clientId: number, secret: string): Promise<string> {
     const raw = await buildSessionCookie(clientId, secret);
-    const match = raw.match(/^(portal_session=[^;]+)/);
+    const match = /^(portal_session=[^;]+)/.exec(raw);
     return match ? match[1] : raw;
   }
 

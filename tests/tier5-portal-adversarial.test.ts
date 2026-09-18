@@ -22,7 +22,7 @@ import {
 // Helper for authenticated client session cookie
 async function createSessionCookie(clientId: number, secret: string): Promise<string> {
   const raw = await buildSessionCookie(clientId, secret);
-  const match = raw.match(/^(portal_session=[^;]+)/);
+  const match = /^(portal_session=[^;]+)/.exec(raw);
   return match ? match[1] : raw;
 }
 
@@ -810,7 +810,7 @@ describe("Tier 5 White-Box Adversarial Hardening — Portal APIs, Data Isolation
             !t ||
             inv.debtor_name.toLowerCase().includes(t) ||
             inv.invoice_number.toLowerCase().includes(t) ||
-            (inv.debtor_email && inv.debtor_email.toLowerCase().includes(t));
+            (inv.debtor_email?.toLowerCase().includes(t));
 
           const matchesStage = stage === "all" || String(inv.stage) === String(stage);
           const matchesStatus = status === "all" || inv.status.toLowerCase() === status.toLowerCase();

@@ -3,17 +3,12 @@ import assert from "node:assert/strict";
 import { createTestEnv, createBasicAuthHeader, signStripeWebhook } from "./harness";
 import worker from "../../backend/src/index";
 import { statutoryInterestPence, fixedCompensationPence } from "../../backend/src/lib/statutory-interest";
-import { nextStepDue, advanceEscalationStage, STEP_LABELS } from "../../backend/src/lib/escalation";
+import { nextStepDue, advanceEscalationStage } from "../../backend/src/lib/escalation";
 import { buildChasePrompt } from "../../backend/src/lib/gemini";
 import { encryptToken, decryptToken } from "../../backend/src/lib/integrations/oauth-manager";
 import {
-  buildSessionCookie,
-  verifySessionToken,
   signLoginToken,
-  verifyLoginToken,
 } from "../../backend/src/lib/portal-auth";
-import { renderPortalDashboard } from "../../backend/src/lib/portal";
-import { renderReviewQueue } from "../../backend/src/lib/admin";
 import { InvoiceEscalationState } from "../../backend/src/types/core";
 
 describe("Tier 4: Real-World Application Workload Scenarios", () => {

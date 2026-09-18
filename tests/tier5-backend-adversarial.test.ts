@@ -5,8 +5,6 @@ import {
   statutoryInterestPence,
 } from "../backend/src/lib/statutory-interest";
 import {
-  CADENCE_DAYS,
-  STEP_LABELS,
   diffDays,
   nextStepDue,
   advanceEscalationStage,
@@ -21,15 +19,12 @@ import {
   decryptToken,
   generateOAuthState,
   verifyOAuthState,
-  buildAuthorizationUrl,
   toBase64Url,
   fromBase64Url,
 } from "../backend/src/lib/integrations/oauth-manager";
 import {
   verifyQuickBooksWebhook,
   verifyXeroWebhook,
-  parseQuickBooksInvoiceUpdate,
-  parseXeroInvoiceUpdate,
 } from "../backend/src/lib/integrations/webhooks";
 import {
   verifyWebhookSignature,
@@ -38,13 +33,12 @@ import {
   sendOperatorNotification,
   sendDebtorCommunication,
   isValidEmail,
-  formatDebtorSignoff,
   SENDER_NAME,
   LOCKED_SENDER_EMAIL,
   OPERATOR_INBOX_EMAIL,
 } from "../backend/src/lib/email";
-import { SyncService, type NormalizedInvoice } from "../backend/src/lib/integrations/sync-service";
-import { createTestDb, createTestEnv, signHmacSha256 } from "./e2e/harness";
+import { SyncService } from "../backend/src/lib/integrations/sync-service";
+import { createTestEnv, signHmacSha256 } from "./e2e/harness";
 import type { InvoiceEscalationState, ChaseHistoryRow } from "../backend/src/types/core";
 
 describe("Tier 5 White-Box Adversarial Hardening — Backend Core Engines", () => {
@@ -232,13 +226,13 @@ describe("Tier 5 White-Box Adversarial Hardening — Backend Core Engines", () =
       assert.strictEqual(dec0.nextAction, "Not yet overdue — no action");
 
       // Missing due date returns safe guard
-      const stateNoDate: InvoiceEscalationState = { stage: "new", dueDate: null as any, lastChaseDate: null };
+      const stateNoDate: InvoiceEscalationState = { stage: "new", dueDate: null, lastChaseDate: null };
       const decNoDate = advanceEscalationStage(stateNoDate, today);
       assert.strictEqual(decNoDate.stage, "new");
       assert.ok(decNoDate.nextAction.includes("No due_date"));
 
       // Terminal stage input (e.g. 'paid'): stage remains unchanged
-      const statePaid: InvoiceEscalationState = { stage: "paid" as any, dueDate, lastChaseDate: null };
+      const statePaid: InvoiceEscalationState = { stage: "paid", dueDate, lastChaseDate: null };
       const decPaid = advanceEscalationStage(statePaid, today);
       assert.strictEqual(decPaid.stage, "paid");
       assert.strictEqual(decPaid.nextAction, "No action — waiting");
@@ -752,8 +746,8 @@ describe("Tier 5 White-Box Adversarial Hardening — Backend Core Engines", () =
       assert.ok(debtorMsg.headers?.["Message-ID"]?.startsWith("<"));
       assert.ok(debtorMsg.headers?.["Message-ID"]?.endsWith("@invoicerescue.co.uk>"));
       // Date header exists and is parseable
-      assert.ok(debtorMsg.headers?.["Date"]);
-      assert.ok(!isNaN(Date.parse(debtorMsg.headers?.["Date"])));
+      assert.ok(debtorMsg.headers?.Date);
+      assert.ok(!isNaN(Date.parse(debtorMsg.headers?.Date)));
       // Reply-To matches locked sender
       assert.strictEqual(debtorMsg.headers?.["Reply-To"], LOCKED_SENDER_EMAIL);
 

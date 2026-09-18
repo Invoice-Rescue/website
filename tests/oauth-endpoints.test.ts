@@ -7,7 +7,6 @@ import {
   verifyOAuthState,
   encryptToken,
   decryptToken,
-  buildAuthorizationUrl,
 } from '../backend/src/lib/integrations/oauth-manager';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
 

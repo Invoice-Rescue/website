@@ -12,13 +12,10 @@ import {
 } from "../../backend/src/lib/integrations/webhooks";
 import {
   buildSessionCookie,
-  verifySessionToken,
-  authenticateClient,
 } from "../../backend/src/lib/portal-auth";
 import { renderReviewQueue } from "../../backend/src/lib/admin";
 import { renderPortalLogin } from "../../backend/src/lib/portal";
 import { verifyWebhookSignature } from "../../backend/src/lib/stripe";
-import { parseCsv } from "../../backend/src/lib/csv";
 import { InvoiceEscalationState } from "../../backend/src/types/core";
 
 describe("Tier 2: Boundary and Corner Cases", () => {
@@ -1454,7 +1451,7 @@ describe("Tier 2: Boundary and Corner Cases", () => {
         send: async () => {
           throw new Error("Simulated email service failure");
         },
-      } as any;
+      };
 
       const req = new Request("http://localhost/api/lead", {
         method: "POST",

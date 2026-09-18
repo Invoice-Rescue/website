@@ -241,11 +241,7 @@ export async function exchangeCodeForTokens(
     throw new Error(`Token exchange failed (${res.status}): ${errText}`);
   }
 
-  const tokenData = (await res.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
+  const tokenData = (await res.json());
 
   let tenantId = "";
   if (provider === 'quickbooks') {
@@ -262,7 +258,7 @@ export async function exchangeCodeForTokens(
     if (!connRes.ok) {
       throw new Error(`Xero connections fetch failed: ${await connRes.text()}`);
     }
-    const connections = (await connRes.json()) as Array<{ tenantId: string; tenantType?: string }>;
+    const connections = (await connRes.json());
     if (!connections || connections.length === 0) {
       throw new Error("No connected Xero organization found");
     }
@@ -307,11 +303,7 @@ export async function refreshProviderTokens(
     throw new Error(`Token refresh failed (${res.status}): ${errText}`);
   }
 
-  const tokenData = (await res.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
+  const tokenData = (await res.json());
 
   return {
     accessToken: tokenData.access_token,

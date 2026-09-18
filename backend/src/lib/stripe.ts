@@ -20,7 +20,7 @@ export async function createCustomer(
     body: new URLSearchParams({ name: input.name, email: input.email }),
   });
   if (!res.ok) return null;
-  const data = (await res.json()) as { id?: string };
+  const data = (await res.json());
   return data.id ?? null;
 }
 
@@ -39,7 +39,7 @@ export async function createBillingPortalSession(
     body: new URLSearchParams({ customer: customerId, return_url: returnUrl }),
   });
   if (!res.ok) return null;
-  const data = (await res.json()) as { url?: string };
+  const data = (await res.json());
   return data.url ?? null;
 }
 

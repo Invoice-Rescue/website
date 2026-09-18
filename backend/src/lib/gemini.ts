@@ -11,10 +11,7 @@ export async function draftChaseMessage(apiKey: string, prompt: string): Promise
   if (!res.ok) {
     throw new Error(`Gemini API error ${res.status}: ${await res.text()}`);
   }
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
-    promptFeedback?: { blockReason?: string };
-  };
+  const data = (await res.json());
   if (data.promptFeedback?.blockReason) {
     throw new Error(`Gemini blocked the prompt: ${data.promptFeedback.blockReason}`);
   }

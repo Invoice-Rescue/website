@@ -9,7 +9,7 @@ describe("Milestone M3: Portal Dashboard, Debtor Ledger & Review Queue Endpoints
   async function createSessionCookieHeader(clientId: number, secret: string): Promise<string> {
     const rawCookie = await buildSessionCookie(clientId, secret);
     // Extract name=value
-    const match = rawCookie.match(/^(portal_session=[^;]+)/);
+    const match = /^(portal_session=[^;]+)/.exec(rawCookie);
     return match ? match[1] : rawCookie;
   }
 

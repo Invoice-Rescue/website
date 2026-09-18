@@ -4,7 +4,6 @@ import { createTestEnv, createBasicAuthHeader } from "./e2e/harness";
 import { buildSessionCookie } from "../backend/src/lib/portal-auth";
 import worker from "../backend/src/index";
 import { fixedCompensationPence, statutoryInterestPence } from "../backend/src/lib/statutory-interest";
-import { calculateDaysOverdue, deriveStage, formatMoney } from "../backend/src/lib/portal-api";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -12,7 +11,7 @@ describe("Milestone M3 Empirical Challenge Suite (Challenger 2)", () => {
   // Helper for authenticated client session cookie
   async function createSessionCookie(clientId: number, secret: string): Promise<string> {
     const raw = await buildSessionCookie(clientId, secret);
-    const match = raw.match(/^(portal_session=[^;]+)/);
+    const match = /^(portal_session=[^;]+)/.exec(raw);
     return match ? match[1] : raw;
   }
 
@@ -804,9 +803,7 @@ describe("Milestone M3 Empirical Challenge Suite (Challenger 2)", () => {
 
       // Verify that after live API metric rendering and activity feed rendering, it returns unconditionally
       // to guarantee live metrics are NEVER overwritten by mock fallback data
-      const liveBlockMatch = content.match(
-        /if\s*\(apiRes\.ok\s*&&\s*apiRes\.data\)[\s\S]*?return;\s*\}/
-      );
+      const liveBlockMatch = /if\s*\(apiRes\.ok\s*&&\s*apiRes\.data\)[\s\S]*?return;\s*\}/.exec(content);
       assert.ok(
         liveBlockMatch,
         "initOverviewDashboard must return unconditionally inside if (apiRes.ok && apiRes.data)"

@@ -50,7 +50,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
 
       const indexes = db
         .prepare("SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
-        .all() as Array<{ name: string; tbl_name: string; sql: string }>;
+        .all() as { name: string; tbl_name: string; sql: string }[];
 
       const indexMap = new Map(indexes.map((idx) => [idx.name, idx]));
 
@@ -81,7 +81,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       // Check count of indexes has not duplicated
       const indexes = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_chase_log_status', 'idx_accounting_connections_lookup', 'idx_clients_status', 'idx_invoices_client_due')")
-        .all() as Array<{ name: string }>;
+        .all() as { name: string }[];
 
       assert.strictEqual(indexes.length, 4, "Must have exactly 4 indexes, no duplicates created");
     });
@@ -91,14 +91,14 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       const db = new DatabaseSync(localD1DbPath);
 
       // Verify integrity
-      const integrity = db.prepare("PRAGMA integrity_check;").all() as Array<{ integrity_check: string }>;
+      const integrity = db.prepare("PRAGMA integrity_check;").all() as { integrity_check: string }[];
       assert.strictEqual(integrity.length, 1);
       assert.strictEqual(integrity[0].integrity_check, "ok");
 
       // Verify indexes in local D1
       const indexes = db
         .prepare("SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'")
-        .all() as Array<{ name: string; tbl_name: string }>;
+        .all() as { name: string; tbl_name: string }[];
       const names = indexes.map((i) => i.name);
 
       assert.ok(names.includes("idx_chase_log_status"), "Local D1 missing idx_chase_log_status");
@@ -109,7 +109,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       // Verify migration table d1_migrations has migration 0007 recorded
       const migrations = db
         .prepare("SELECT id, name, applied_at FROM d1_migrations ORDER BY id ASC")
-        .all() as Array<{ id: number; name: string; applied_at: string }>;
+        .all() as { id: number; name: string; applied_at: string }[];
 
       assert.strictEqual(migrations.length, 7);
       assert.strictEqual(migrations[6].name, "0007_query_indices.sql");
@@ -126,7 +126,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       // Check plan WITH index
       const planWithIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM chase_log WHERE status = 'draft'")
-        .all() as Array<{ id: number; parent: number; notused: number; detail: string }>;
+        .all() as { id: number; parent: number; notused: number; detail: string }[];
 
       const detail = planWithIndex.map((p) => p.detail).join("; ");
       assert.ok(
@@ -142,7 +142,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       db.exec("DROP INDEX idx_chase_log_status;");
       const planWithoutIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM chase_log WHERE status = 'draft'")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       const detailWithout = planWithoutIndex.map((p) => p.detail).join("; ");
       assert.ok(
         detailWithout.includes("SCAN chase_log"),
@@ -155,7 +155,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
 
       const planWithIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT client_id FROM accounting_connections WHERE provider = ? AND tenant_id = ?")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
 
       const detail = planWithIndex.map((p) => p.detail).join("; ");
       assert.ok(
@@ -171,7 +171,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       db.exec("DROP INDEX idx_accounting_connections_lookup;");
       const planWithoutIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT client_id FROM accounting_connections WHERE provider = ? AND tenant_id = ?")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       const detailWithout = planWithoutIndex.map((p) => p.detail).join("; ");
       assert.ok(
         detailWithout.includes("SCAN accounting_connections"),
@@ -184,7 +184,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
 
       const planWithIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM clients WHERE status = 'active'")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
 
       const detail = planWithIndex.map((p) => p.detail).join("; ");
       assert.ok(
@@ -200,7 +200,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       db.exec("DROP INDEX idx_clients_status;");
       const planWithoutIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM clients WHERE status = 'active'")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       const detailWithout = planWithoutIndex.map((p) => p.detail).join("; ");
       assert.ok(
         detailWithout.includes("SCAN clients"),
@@ -213,7 +213,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
 
       const planWithIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM invoices WHERE client_id = ? ORDER BY due_date DESC")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
 
       const detail = planWithIndex.map((p) => p.detail).join("; ");
       assert.ok(
@@ -229,7 +229,7 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       db.exec("DROP INDEX idx_invoices_client_due;");
       const planWithoutIndex = db
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM invoices WHERE client_id = ? ORDER BY due_date DESC")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       const detailWithout = planWithoutIndex.map((p) => p.detail).join("; ");
       assert.ok(
         detailWithout.includes("USE TEMP B-TREE FOR ORDER BY"),
@@ -241,19 +241,19 @@ describe("Milestone M4 Stress Suite — Challenger 2 (D1 Query Indexing, Migrati
       const db = new DatabaseSync(localD1DbPath);
 
       // Query A
-      const planA = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM chase_log WHERE status = 'draft'").all() as Array<{ detail: string }>;
+      const planA = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM chase_log WHERE status = 'draft'").all() as { detail: string }[];
       assert.ok(planA.some((p) => p.detail.includes("idx_chase_log_status")));
 
       // Query B
-      const planB = db.prepare("EXPLAIN QUERY PLAN SELECT client_id FROM accounting_connections WHERE provider = ? AND tenant_id = ?").all() as Array<{ detail: string }>;
+      const planB = db.prepare("EXPLAIN QUERY PLAN SELECT client_id FROM accounting_connections WHERE provider = ? AND tenant_id = ?").all() as { detail: string }[];
       assert.ok(planB.some((p) => p.detail.includes("idx_accounting_connections_lookup")));
 
       // Query C
-      const planC = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM clients WHERE status = 'active'").all() as Array<{ detail: string }>;
+      const planC = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM clients WHERE status = 'active'").all() as { detail: string }[];
       assert.ok(planC.some((p) => p.detail.includes("idx_clients_status")));
 
       // Query D
-      const planD = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM invoices WHERE client_id = ? ORDER BY due_date DESC").all() as Array<{ detail: string }>;
+      const planD = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM invoices WHERE client_id = ? ORDER BY due_date DESC").all() as { detail: string }[];
       assert.ok(planD.some((p) => p.detail.includes("idx_invoices_client_due")));
       assert.ok(!planD.some((p) => p.detail.includes("USE TEMP B-TREE")));
     });

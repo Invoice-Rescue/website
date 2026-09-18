@@ -11,10 +11,8 @@ import {
 } from '../backend/src/lib/integrations/oauth-manager';
 import {
   recordAccountingWebhook,
-  getAccountingConnection,
   InvalidWebhookEventError,
 } from '../backend/src/lib/tenant-repo';
-import { verifyXeroWebhook, verifyQuickBooksWebhook } from '../backend/src/lib/integrations/webhooks';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
 
 describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {

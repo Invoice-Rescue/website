@@ -17,6 +17,7 @@
  *   GET  /portal/dashboard                     → client's own invoices + chase history w/ review audit trail [client]
  *   POST /portal/billing                       → redirect to Stripe-hosted billing portal [client]
  *   POST /portal/logout                        → clear session cookie [client]
+ *   GET  /dashboard/*                          → authenticated client portal (debtors, approval queue, analytics) [client/admin]
  *
  * [admin] routes require HTTP Basic Auth — any username, password = ADMIN_SECRET.
  * [client] routes require a portal session cookie — see backend/src/lib/portal-auth.ts. No
@@ -200,27 +201,27 @@ export default {
         return await handleQuickBooksWebhook(request, env);
       }
 
-      const oauthConnectMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/connect$/);
+      const oauthConnectMatch = /^\/api\/oauth\/(xero|quickbooks)\/connect$/.exec(path);
       if (request.method === "GET" && oauthConnectMatch) {
         return await handleOAuthConnect(request, env, oauthConnectMatch[1] as 'xero' | 'quickbooks');
       }
 
-      const oauthCallbackMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/callback$/);
+      const oauthCallbackMatch = /^\/api\/oauth\/(xero|quickbooks)\/callback$/.exec(path);
       if (request.method === "GET" && oauthCallbackMatch) {
         return await handleOAuthCallback(request, env, oauthCallbackMatch[1] as 'xero' | 'quickbooks');
       }
 
-      const oauthRefreshMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/refresh$/);
+      const oauthRefreshMatch = /^\/api\/oauth\/(xero|quickbooks)\/refresh$/.exec(path);
       if (request.method === "POST" && oauthRefreshMatch) {
         return await handleOAuthRefresh(request, env, oauthRefreshMatch[1] as 'xero' | 'quickbooks');
       }
 
-      const oauthDisconnectMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/disconnect$/);
+      const oauthDisconnectMatch = /^\/api\/oauth\/(xero|quickbooks)\/disconnect$/.exec(path);
       if (request.method === "POST" && oauthDisconnectMatch) {
         return await handleOAuthDisconnect(request, env, oauthDisconnectMatch[1] as 'xero' | 'quickbooks');
       }
 
-      const oauthStatusMatch = path.match(/^\/api\/oauth\/(xero|quickbooks)\/status$/);
+      const oauthStatusMatch = /^\/api\/oauth\/(xero|quickbooks)\/status$/.exec(path);
       if (request.method === "GET" && oauthStatusMatch) {
         return await handleOAuthStatus(request, env, oauthStatusMatch[1] as 'xero' | 'quickbooks');
       }
@@ -252,6 +253,20 @@ export default {
         return await handlePortalBilling(request, env);
       }
 
+      if (path.startsWith("/dashboard")) {
+        const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+        const isAdmin = requireAdminAuth(request, env) === null;
+        if (!clientId && !isAdmin) {
+          return new Response(null, {
+            status: 303,
+            headers: { ...SECURITY_HEADERS, Location: "/portal" },
+          });
+        }
+        if (env.ASSETS && typeof env.ASSETS.fetch === "function") {
+          return await env.ASSETS.fetch(request);
+        }
+      }
+
       if (request.method === "POST" && path === "/api/lead") {
         return await handleLead(request, env);
       }
@@ -260,7 +275,7 @@ export default {
         return requireAdminAuth(request, env) ?? (await handleCreateClient(request, env));
       }
 
-      const importMatch = path.match(/^\/api\/clients\/(\d+)\/invoices\/import$/);
+      const importMatch = /^\/api\/clients\/(\d+)\/invoices\/import$/.exec(path);
       if (request.method === "POST" && importMatch) {
         return requireAdminAuth(request, env) ?? (await handleInvoiceImport(request, env, importMatch[1]));
       }
@@ -281,17 +296,17 @@ export default {
         return await handleGetDrafts(request, env);
       }
 
-      const approveMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)\/approve$/);
+      const approveMatch = /^\/api\/(?:admin\/drafts|chase)\/(\d+)\/approve$/.exec(path);
       if (request.method === "POST" && approveMatch) {
         return await handleApproveDraft(request, env, approveMatch[1]);
       }
 
-      const skipMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)\/skip$/);
+      const skipMatch = /^\/api\/(?:admin\/drafts|chase)\/(\d+)\/skip$/.exec(path);
       if (request.method === "POST" && skipMatch) {
         return await handleSkipDraft(request, env, skipMatch[1]);
       }
 
-      const updateMatch = path.match(/^\/api\/(?:admin\/drafts|chase)\/(\d+)$/);
+      const updateMatch = /^\/api\/(?:admin\/drafts|chase)\/(\d+)$/.exec(path);
       if (request.method === "PUT" && updateMatch) {
         return await handleUpdateDraft(request, env, updateMatch[1]);
       }
@@ -373,7 +388,7 @@ async function parseLead(request: Request): Promise<LeadInput> {
   let raw: Record<string, unknown> = {};
 
   if (contentType.includes("application/json")) {
-    raw = (await request.json()) as Record<string, unknown>;
+    raw = (await request.json());
   } else {
     const form = await request.formData();
     raw = Object.fromEntries(form.entries());

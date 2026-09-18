@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createTestEnv } from './e2e/harness';
 import worker from '../backend/src/index';
 import { SyncService, type NormalizedInvoice } from '../backend/src/lib/integrations/sync-service';
-import { encryptToken, decryptToken } from '../backend/src/lib/integrations/oauth-manager';
+import { encryptToken } from '../backend/src/lib/integrations/oauth-manager';
 
 describe('SyncService & Accounting Webhooks', () => {
   let originalFetch: typeof globalThis.fetch;

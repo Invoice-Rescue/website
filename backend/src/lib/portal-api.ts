@@ -46,7 +46,7 @@ export async function resolveAuth(
 
   // 1. Check HTTP Basic Auth (Admin)
   if (authHeader?.startsWith("Basic ")) {
-    const match = authHeader.match(/^Basic (.+)$/);
+    const match = /^Basic (.+)$/.exec(authHeader);
     const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(":") + 1) : null;
     if (password === env.ADMIN_SECRET) {
       const url = new URL(request.url);
@@ -75,7 +75,7 @@ export async function resolveAuth(
   } else {
     // Check Cookie header: portal_session or ir_portal_session
     const cookieHeader = request.headers.get("Cookie") ?? "";
-    const match = cookieHeader.match(/(?:^|;\s*)(?:portal_session|ir_portal_session)=([^;]+)/);
+    const match = /(?:^|;\s*)(?:portal_session|ir_portal_session)=([^;]+)/.exec(cookieHeader);
     if (match) token = match[1];
   }
 
@@ -191,7 +191,7 @@ export function deriveStage(daysOverdue: number, maxStepFromChaseLog?: number | 
 /**
  * Formats a monetary amount in major currency units.
  */
-export function formatMoney(amountPence: number, currency: string = "GBP"): string {
+export function formatMoney(amountPence: number, currency = "GBP"): string {
   const sym = currency === "USD" ? "$" : currency === "EUR" ? "€" : "£";
   return `${sym}${(amountPence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -729,7 +729,7 @@ export async function handleApproveDraft(
 
   if (contentType.includes("application/json")) {
     try {
-      const json = await request.json() as Record<string, unknown>;
+      const json = await request.json();
       const edited = (json.body ?? json.custom_message) as string | undefined;
       if (typeof edited === "string" && edited.trim()) {
         body = edited;
@@ -887,7 +887,7 @@ export async function handleUpdateDraft(
   const contentType = request.headers.get("Content-Type") ?? "";
   if (contentType.includes("application/json")) {
     try {
-      const json = await request.json() as Record<string, unknown>;
+      const json = await request.json();
       if (typeof json.body === "string") body = json.body;
       else if (typeof json.custom_message === "string") body = json.custom_message;
       if (typeof json.subject === "string") subject = json.subject;
@@ -916,7 +916,7 @@ export async function handleUpdateDraft(
     }
   }
 
-  if (body === null || !body.trim()) {
+  if (!body?.trim()) {
     return Response.json(
       { ok: false, error: "Draft body cannot be empty." },
       { status: 400, headers: SECURITY_HEADERS },

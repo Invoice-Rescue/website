@@ -15,13 +15,10 @@ import {
   skipTenantDraft,
   TenantRepository,
   InvalidTenantError,
-  InvalidInvoiceDataError,
-  InvalidWebhookEventError,
-  InvalidInputError,
 } from '../backend/src/lib/tenant-repo';
 import { SyncService, NormalizedInvoice } from '../backend/src/lib/integrations/sync-service';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
-import { encryptToken, generateOAuthState, verifyOAuthState } from '../backend/src/lib/integrations/oauth-manager';
+import { verifyOAuthState } from '../backend/src/lib/integrations/oauth-manager';
 import { signHmacSha256 } from './e2e/harness';
 
 describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architecture)', () => {
@@ -534,8 +531,8 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       );
 
       // Exactly ONE returns true (new), 29 return false (duplicate)
-      const trueCount = results.filter(r => r === true).length;
-      const falseCount = results.filter(r => r === false).length;
+      const trueCount = results.filter(r => r).length;
+      const falseCount = results.filter(r => !r).length;
 
       assert.strictEqual(trueCount, 1, 'Expected exactly 1 webhook event to be accepted');
       assert.strictEqual(falseCount, 29, 'Expected 29 duplicate webhook events to be rejected');

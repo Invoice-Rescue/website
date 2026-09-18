@@ -122,7 +122,7 @@ export function clearSessionCookie(): string {
 /** Extracts the session token from a request's Cookie header, if present. */
 export function readSessionCookie(request: Request): string | null {
   const header = request.headers.get("Cookie") ?? "";
-  const match = header.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`).exec(header);
   return match ? match[1] : null;
 }
 

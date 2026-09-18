@@ -420,7 +420,7 @@ export class SyncService {
       throw new Error(`Xero API error (${res.status}): ${await res.text()}`);
     }
 
-    const data = (await res.json()) as { Invoices?: any[] };
+    const data = (await res.json());
     return (data.Invoices ?? []).map(inv => this.normalizeXeroInvoice(inv));
   }
 
@@ -434,7 +434,7 @@ export class SyncService {
     });
 
     if (!res.ok) return null;
-    const data = (await res.json()) as { Invoices?: any[] };
+    const data = (await res.json());
     const inv = data.Invoices?.[0];
     return inv ? this.normalizeXeroInvoice(inv) : null;
   }
@@ -482,7 +482,7 @@ export class SyncService {
       throw new Error(`QuickBooks API error (${res.status}): ${await res.text()}`);
     }
 
-    const data = (await res.json()) as { QueryResponse?: { Invoice?: any[] } };
+    const data = (await res.json());
     return (data.QueryResponse?.Invoice ?? []).map(inv => this.normalizeQuickBooksInvoice(inv));
   }
 
@@ -495,7 +495,7 @@ export class SyncService {
     });
 
     if (!res.ok) return null;
-    const data = (await res.json()) as { Invoice?: any };
+    const data = (await res.json());
     return data.Invoice ? this.normalizeQuickBooksInvoice(data.Invoice) : null;
   }
 
