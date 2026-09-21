@@ -37,13 +37,13 @@
   },
   "homepage": "https://github.com/Invoice-Rescue/website#readme",
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260826.1",
+    "@cloudflare/workers-types": "^5.20260918.1",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.6.1",
     "markdownlint-cli2": "^0.23.2",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "wrangler": "^4.126.0"
+    "wrangler": "^4.134.0"
   },
   "overrides": {
     "smol-toml": "^1.7.1"
