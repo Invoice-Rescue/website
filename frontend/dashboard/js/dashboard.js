@@ -504,7 +504,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
             data = JSON.parse(text);
           }
         }
-      } catch (_) {
+      } catch {
         data = null;
       }
       if (!res.ok) {
@@ -523,7 +523,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       if (res.ok && res.data?.boeBaseRatePercent) {
         boeBaseRatePercent = Number(res.data.boeBaseRatePercent);
       }
-    } catch (e) {
+    } catch {
       // Quiet fallback to 3.75%
     }
   }
@@ -1106,7 +1106,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       }
 
       queueList.innerHTML = drafts
-        .map((draft, idx) => {
+        .map((draft) => {
           const compensationPence = computeFixedCompensationPence(draft.amount_pence);
           const interestPence = computeStatutoryInterestPence(draft.amount_pence, draft.days_overdue);
           const totalClaimPence = draft.amount_pence + compensationPence + interestPence;
@@ -1359,7 +1359,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
         if (!res.ok && res.status === 404) {
           await apiFetch(`/api/chase/${id}/skip`, { method: "POST" });
         }
-      } catch (e) {
+      } catch {
         // Offline / mock fallback
       }
 
