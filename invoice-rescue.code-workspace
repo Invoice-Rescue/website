@@ -9,6 +9,8 @@
 		"npm.packageManager": "npm",
 		"typescript.tsdk": "node_modules/typescript/lib",
 		"typescript.preferences.importModuleSpecifier": "relative",
+		"eslint.enable": true,
+		"standard.enable": false,
 		"files.exclude": {
 			"**/.git": true,
 			"**/.wrangler": true,

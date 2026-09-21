@@ -1,7 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "module": "ESNext"
-  },
-  "include": ["tests", "scripts", "playwright.config.ts", "worker-configuration.d.ts"]
-}

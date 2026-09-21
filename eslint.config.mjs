@@ -46,7 +46,7 @@ export default tseslint.config(
       },
     },
   },
-  
+
   // Apply strict type-checked rules to TypeScript files
   ...tseslint.configs.strictTypeChecked.map((config) => {
     const newConfig = { ...config, files: ['**/*.{ts,tsx}'] };
@@ -82,7 +82,7 @@ export default tseslint.config(
     rules: {
       ...reactHooksPlugin.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
-      
+
       // Catch unhandled async promises (prevents silent agent runtime failures)
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/await-thenable': 'warn',

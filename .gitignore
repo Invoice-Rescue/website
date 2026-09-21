@@ -27,6 +27,13 @@ node_modules/
 *.tmp
 *.tsbuildinfo
 .cache/
+.eslintcache/
+.eslintcache
+
+# Local tools, reviews & memory graphs
+graphify-out/
+.claude/reviews/
+skills-lock.json
 
 # Hookify local rules
 .claude/*.local.md

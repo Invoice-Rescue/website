@@ -8,12 +8,14 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "composite": true
+    "resolveJsonModule": true
   },
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+  "include": [
+    "backend/src",
+    "worker-configuration.d.ts",
+    "tests",
+    "scripts",
+    "e2e",
+    "playwright.config.ts"
   ]
 }
