@@ -1,10 +1,10 @@
-import { CADENCE_DAYS, STEP_LABELS, diffDays } from "./escalation";
+import { CADENCE_DAYS, STEP_LABELS, diffDays } from './escalation';
 export { diffDays };
-import { fixedCompensationPence, statutoryInterestPence } from "./statutory-interest";
-import { buildChasePrompt, draftChaseMessage } from "./gemini";
-import { sendOperatorNotification } from "./email";
+import { fixedCompensationPence, statutoryInterestPence } from './statutory-interest';
+import { buildChasePrompt, draftChaseMessage } from './gemini';
+import { sendOperatorNotification } from './email';
 
-export const SENDER_NAME = "Invoice Rescue";
+export const SENDER_NAME = 'Invoice Rescue';
 
 export interface OverdueInvoiceRow {
   id: number;
@@ -29,29 +29,29 @@ export interface ChaseRunResult {
 
 export function parseDate(dateVal: string | Date | number): Date {
   if (dateVal instanceof Date) return dateVal;
-  if (typeof dateVal === "number") return new Date(dateVal);
+  if (typeof dateVal === 'number') return new Date(dateVal);
   const trimmed = String(dateVal).trim();
-  if (trimmed.includes("T")) {
-    return new Date(trimmed.endsWith("Z") ? trimmed : trimmed + "Z");
+  if (trimmed.includes('T')) {
+    return new Date(trimmed.endsWith('Z') ? trimmed : trimmed + 'Z');
   }
-  if (trimmed.includes(" ")) {
-    return new Date(trimmed.replace(" ", "T") + "Z");
+  if (trimmed.includes(' ')) {
+    return new Date(trimmed.replace(' ', 'T') + 'Z');
   }
-  return new Date(trimmed + "T00:00:00Z");
+  return new Date(trimmed + 'T00:00:00Z');
 }
 
 export function generateFallbackDraft(
   inv: OverdueInvoiceRow,
   step: number,
   interestPence: number,
-  compPence: number,
+  compPence: number
 ): string {
   const amountStr = `${inv.currency} ${(inv.amount_pence / 100).toFixed(2)}`;
   const interestStr = `${inv.currency} ${(interestPence / 100).toFixed(2)}`;
   const compStr = `${inv.currency} ${(compPence / 100).toFixed(2)}`;
   const clientName = inv.company_name;
 
-  let message = "";
+  let message: string;
   if (step === 1) {
     message = `Hi ${inv.debtor_name},\n\nWe hope this note finds you well. We are following up regarding invoice ${inv.invoice_number} for ${amountStr}, which was due on ${inv.due_date}. We appreciate this may have simply slipped through, so we would be grateful if you could confirm payment at your earliest convenience.`;
   } else if (step === 2) {
@@ -63,11 +63,11 @@ export function generateFallbackDraft(
   }
 
   const signoff = [
-    "",
-    "Tibor Rames",
+    '',
+    'Tibor Rames',
     `Invoice Rescue — acting on behalf of ${clientName}`,
-    "hello@invoicerescue.co.uk",
-  ].join("\n");
+    'hello@invoicerescue.co.uk',
+  ].join('\n');
 
   return `${message}\n${signoff}`;
 }
@@ -104,9 +104,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
        FROM invoices i JOIN clients c ON c.id = i.client_id
        WHERE i.status = 'overdue' AND i.due_date < date('now')`;
 
-  const stmt = now
-    ? env.DB.prepare(query).bind(now.toISOString())
-    : env.DB.prepare(query);
+  const stmt = now ? env.DB.prepare(query).bind(now.toISOString()) : env.DB.prepare(query);
 
   const overdue = await stmt.all<OverdueInvoiceRow>();
   const boeBaseRatePercent = Number(env.BOE_BASE_RATE_PERCENT);
@@ -114,7 +112,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
   for (const inv of overdue.results ?? []) {
     // 1. Pending draft gating: check if invoice already has a row with status = 'draft' in chase_log
     const pendingDraft = await env.DB.prepare(
-      `SELECT id FROM chase_log WHERE invoice_id = ?1 AND status = 'draft' LIMIT 1`,
+      `SELECT id FROM chase_log WHERE invoice_id = ?1 AND status = 'draft' LIMIT 1`
     )
       .bind(inv.id)
       .first<{ id: number }>();
@@ -129,7 +127,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
       `SELECT id, step, channel, status, sent_at, reviewed_at
        FROM chase_log
        WHERE invoice_id = ?1
-       ORDER BY step ASC, id ASC`,
+       ORDER BY step ASC, id ASC`
     )
       .bind(inv.id)
       .all<{
@@ -144,7 +142,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
     const history = historyRes.results ?? [];
 
     // Check terminal condition: Has Stage 4 been sent and 7+ days passed without payment?
-    const stage4Sent = history.filter((h) => h.step === 4 && h.status === "sent").pop();
+    const stage4Sent = history.filter((h) => h.step === 4 && h.status === 'sent').pop();
     if (stage4Sent) {
       const stage4Date = parseDate(stage4Sent.sent_at);
       const daysSinceStage4 = diffDays(currentDate, stage4Date);
@@ -158,7 +156,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
         await sendOperatorNotification(
           env,
           `Invoice Rescue: Invoice ${inv.invoice_number} escalated (Stage 4 exhausted)`,
-          `Invoice ${inv.invoice_number} for ${inv.debtor_name} (${inv.company_name}) has reached terminal escalation after Stage 4 final notice with no payment received. Hand back to client recommended.`,
+          `Invoice ${inv.invoice_number} for ${inv.debtor_name} (${inv.company_name}) has reached terminal escalation after Stage 4 final notice with no payment received. Hand back to client recommended.`
         );
 
         result.invoicesEscalated++;
@@ -187,9 +185,10 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
     // 3. Enforce 7-day spacing between chases (for steps > 1)
     if (nextStep > 1) {
       // Find the last chase that was sent or reviewed
-      const lastChase = history.filter((h) => h.step === lastStep).pop() ?? history[history.length - 1];
+      const lastChase =
+        history.filter((h) => h.step === lastStep).pop() ?? history[history.length - 1];
       if (lastChase) {
-        const lastChaseDate = parseDate(lastChase.sent_at || lastChase.reviewed_at || "");
+        const lastChaseDate = parseDate(lastChase.sent_at || lastChase.reviewed_at || '');
         const daysSinceChase = diffDays(currentDate, lastChaseDate);
         if (daysSinceChase < 7) {
           // Less than 7 days since prior chase; wait
@@ -228,7 +227,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
 
     await env.DB.prepare(
       `INSERT INTO chase_log (invoice_id, step, channel, subject, outcome, status, body)
-       VALUES (?1, ?2, 'email', ?3, NULL, 'draft', ?4)`,
+       VALUES (?1, ?2, 'email', ?3, NULL, 'draft', ?4)`
     )
       .bind(inv.id, nextStep, `Re: Invoice ${inv.invoice_number}`, body)
       .run();
@@ -238,14 +237,14 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
 
   // Notify operator if any drafts are waiting for review
   const draftCount = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM chase_log WHERE status = 'draft'`,
+    `SELECT COUNT(*) AS n FROM chase_log WHERE status = 'draft'`
   ).first<{ n: number }>();
 
   if (draftCount && draftCount.n > 0) {
     await sendOperatorNotification(
       env,
       `Invoice Rescue: ${draftCount.n} chase draft(s) ready for review`,
-      `${draftCount.n} chase message(s) are waiting for your review at /admin.`,
+      `${draftCount.n} chase message(s) are waiting for your review at /admin.`
     );
   }
 

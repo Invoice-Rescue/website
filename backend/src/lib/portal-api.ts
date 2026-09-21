@@ -12,19 +12,19 @@
  * Enforces strict tenant isolation, locked sender model, and zero external runtime dependencies.
  */
 
-import { fixedCompensationPence, statutoryInterestPence } from "./statutory-interest";
-import { diffDays } from "./escalation";
-import { verifySessionToken } from "./portal-auth";
-import { sendDebtorCommunication } from "./email";
+import { fixedCompensationPence, statutoryInterestPence } from './statutory-interest';
+import { diffDays } from './escalation';
+import { verifySessionToken } from './portal-auth';
+import { sendDebtorCommunication } from './email';
 
-export const SENDER_NAME = "Invoice Rescue";
-export const LOCKED_SENDER_EMAIL = "hello@invoicerescue.co.uk";
+export const SENDER_NAME = 'Invoice Rescue';
+export const LOCKED_SENDER_EMAIL = 'hello@invoicerescue.co.uk';
 
 export const SECURITY_HEADERS: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
 export interface AuthContext {
@@ -40,17 +40,17 @@ export interface AuthContext {
  */
 export async function resolveAuth(
   request: Request,
-  env: Env,
+  env: Env
 ): Promise<{ auth: AuthContext | null; errorResponse: Response | null }> {
-  const authHeader = request.headers.get("Authorization");
+  const authHeader = request.headers.get('Authorization');
 
   // 1. Check HTTP Basic Auth (Admin)
-  if (authHeader?.startsWith("Basic ")) {
+  if (authHeader?.startsWith('Basic ')) {
     const match = /^Basic (.+)$/.exec(authHeader);
-    const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(":") + 1) : null;
+    const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(':') + 1) : null;
     if (password === env.ADMIN_SECRET) {
       const url = new URL(request.url);
-      const queryCid = url.searchParams.get("client_id");
+      const queryCid = url.searchParams.get('client_id');
       return {
         auth: {
           isAdmin: true,
@@ -61,20 +61,20 @@ export async function resolveAuth(
     }
     return {
       auth: null,
-      errorResponse: new Response("Unauthorized", {
+      errorResponse: new Response('Unauthorized', {
         status: 401,
-        headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+        headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
       }),
     };
   }
 
   // 2. Check Bearer Token (Client Portal)
   let token: string | null = null;
-  if (authHeader?.startsWith("Bearer ")) {
+  if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.slice(7).trim();
   } else {
     // Check Cookie header: portal_session or ir_portal_session
-    const cookieHeader = request.headers.get("Cookie") ?? "";
+    const cookieHeader = request.headers.get('Cookie') ?? '';
     const match = /(?:^|;\s*)(?:portal_session|ir_portal_session)=([^;]+)/.exec(cookieHeader);
     if (match) token = match[1];
   }
@@ -103,7 +103,7 @@ export async function resolveAuth(
  */
 export async function resolvePortalClientId(
   request: Request,
-  env: Env,
+  env: Env
 ): Promise<{ clientId: number | null; errorResponse: Response | null }> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) {
@@ -111,7 +111,7 @@ export async function resolvePortalClientId(
   }
 
   const url = new URL(request.url);
-  const queryCid = url.searchParams.get("client_id");
+  const queryCid = url.searchParams.get('client_id');
 
   if (auth) {
     if (auth.isAdmin) {
@@ -123,7 +123,7 @@ export async function resolvePortalClientId(
           clientId: null,
           errorResponse: Response.json(
             { ok: false, error: "Forbidden: Cannot access another client's data." },
-            { status: 403, headers: SECURITY_HEADERS },
+            { status: 403, headers: SECURITY_HEADERS }
           ),
         };
       }
@@ -133,16 +133,16 @@ export async function resolvePortalClientId(
 
   // Fallback for admin without client_id or demo unauthenticated mode
   const activeClient = await env.DB.prepare(
-    `SELECT id FROM clients WHERE status = 'active' ORDER BY id ASC LIMIT 1`,
+    `SELECT id FROM clients WHERE status = 'active' ORDER BY id ASC LIMIT 1`
   ).first<{ id: number }>();
 
   if (activeClient) {
     return { clientId: activeClient.id, errorResponse: null };
   }
 
-  const firstClient = await env.DB.prepare(
-    `SELECT id FROM clients ORDER BY id ASC LIMIT 1`,
-  ).first<{ id: number }>();
+  const firstClient = await env.DB.prepare(`SELECT id FROM clients ORDER BY id ASC LIMIT 1`).first<{
+    id: number;
+  }>();
 
   return { clientId: firstClient ? firstClient.id : null, errorResponse: null };
 }
@@ -161,29 +161,33 @@ export function calculateDaysOverdue(dueDateStr: string): number {
 /**
  * Derives escalation stage (0 to 4) and human-readable label.
  */
-export function deriveStage(daysOverdue: number, maxStepFromChaseLog?: number | null): { stage: number; label: string } {
-  const stage = maxStepFromChaseLog && maxStepFromChaseLog > 0
-    ? maxStepFromChaseLog
-    : daysOverdue < 1
-    ? 0
-    : daysOverdue <= 7
-    ? 1
-    : daysOverdue <= 14
-    ? 2
-    : daysOverdue <= 21
-    ? 3
-    : 4;
+export function deriveStage(
+  daysOverdue: number,
+  maxStepFromChaseLog?: number | null
+): { stage: number; label: string } {
+  const stage =
+    maxStepFromChaseLog && maxStepFromChaseLog > 0
+      ? maxStepFromChaseLog
+      : daysOverdue < 1
+        ? 0
+        : daysOverdue <= 7
+          ? 1
+          : daysOverdue <= 14
+            ? 2
+            : daysOverdue <= 21
+              ? 3
+              : 4;
 
   const label =
     stage === 0
-      ? "Current"
+      ? 'Current'
       : stage === 1
-      ? "Stage 1 (Gentle)"
-      : stage === 2
-      ? "Stage 2 (Follow-up)"
-      : stage === 3
-      ? "Stage 3 (Firm)"
-      : "Stage 4 (Final)";
+        ? 'Stage 1 (Gentle)'
+        : stage === 2
+          ? 'Stage 2 (Follow-up)'
+          : stage === 3
+            ? 'Stage 3 (Firm)'
+            : 'Stage 4 (Final)';
 
   return { stage, label };
 }
@@ -191,9 +195,9 @@ export function deriveStage(daysOverdue: number, maxStepFromChaseLog?: number | 
 /**
  * Formats a monetary amount in major currency units.
  */
-export function formatMoney(amountPence: number, currency = "GBP"): string {
-  const sym = currency === "USD" ? "$" : currency === "EUR" ? "€" : "£";
-  return `${sym}${(amountPence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function formatMoney(amountPence: number, currency = 'GBP'): string {
+  const sym = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£';
+  return `${sym}${(amountPence / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // ============================================================================
@@ -209,8 +213,8 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
       {
         ok: true,
         clientId: null,
-        companyName: "Demo Client",
-        plan: "foundation",
+        companyName: 'Demo Client',
+        plan: 'foundation',
         metrics: {
           totalOverduePence: 0,
           activeChasingPence: 0,
@@ -224,63 +228,69 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
           overdueCount: 0,
         },
         agingBreakdown: {
-          bucket1_to_7: { amountPence: 0, count: 0, percentage: 0, days: "1-7d", stage: 1 },
-          bucket8_to_14: { amountPence: 0, count: 0, percentage: 0, days: "8-14d", stage: 2 },
-          bucket15_to_21: { amountPence: 0, count: 0, percentage: 0, days: "15-21d", stage: 3 },
-          bucket22_plus: { amountPence: 0, count: 0, percentage: 0, days: "22d+", stage: 4 },
-          bucket1: { amountPence: 0, count: 0, percentage: 0, days: "1-7d", stage: 1 },
-          bucket2: { amountPence: 0, count: 0, percentage: 0, days: "8-14d", stage: 2 },
-          bucket3: { amountPence: 0, count: 0, percentage: 0, days: "15-21d", stage: 3 },
-          bucket4: { amountPence: 0, count: 0, percentage: 0, days: "22d+", stage: 4 },
+          bucket1_to_7: { amountPence: 0, count: 0, percentage: 0, days: '1-7d', stage: 1 },
+          bucket8_to_14: { amountPence: 0, count: 0, percentage: 0, days: '8-14d', stage: 2 },
+          bucket15_to_21: { amountPence: 0, count: 0, percentage: 0, days: '15-21d', stage: 3 },
+          bucket22_plus: { amountPence: 0, count: 0, percentage: 0, days: '22d+', stage: 4 },
+          bucket1: { amountPence: 0, count: 0, percentage: 0, days: '1-7d', stage: 1 },
+          bucket2: { amountPence: 0, count: 0, percentage: 0, days: '8-14d', stage: 2 },
+          bucket3: { amountPence: 0, count: 0, percentage: 0, days: '15-21d', stage: 3 },
+          bucket4: { amountPence: 0, count: 0, percentage: 0, days: '22d+', stage: 4 },
         },
         pipeline: { count: 0, amountPence: 0 },
         recentActivity: [],
       },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
-  const client = await env.DB.prepare(
-    `SELECT id, company_name, plan FROM clients WHERE id = ?1`,
-  ).bind(clientId).first<{ id: number; company_name: string; plan: string }>();
+  const client = await env.DB.prepare(`SELECT id, company_name, plan FROM clients WHERE id = ?1`)
+    .bind(clientId)
+    .first<{ id: number; company_name: string; plan: string }>();
 
   const invoices = await env.DB.prepare(
     `SELECT id, amount_pence, currency, due_date, status, paid_date
      FROM invoices
-     WHERE client_id = ?1`,
-  ).bind(clientId).all<{
-    id: number;
-    amount_pence: number;
-    currency: string;
-    due_date: string;
-    status: string;
-    paid_date: string | null;
-  }>();
+     WHERE client_id = ?1`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      amount_pence: number;
+      currency: string;
+      due_date: string;
+      status: string;
+      paid_date: string | null;
+    }>();
 
   let totalOverduePence = 0;
   let activeChasingPence = 0;
   let recoveredMonthPence = 0;
   let overdueCount = 0;
 
-  let b1Pence = 0, b1Count = 0;
-  let b2Pence = 0, b2Count = 0;
-  let b3Pence = 0, b3Count = 0;
-  let b4Pence = 0, b4Count = 0;
+  let b1Pence = 0,
+    b1Count = 0;
+  let b2Pence = 0,
+    b2Count = 0;
+  let b3Pence = 0,
+    b3Count = 0;
+  let b4Pence = 0,
+    b4Count = 0;
 
   const nowMs = Date.now();
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
 
   for (const inv of invoices.results ?? []) {
-    if (inv.status === "paid") {
-      const isRecent = !inv.paid_date || (nowMs - new Date(inv.paid_date).getTime() <= thirtyDaysMs);
+    if (inv.status === 'paid') {
+      const isRecent = !inv.paid_date || nowMs - new Date(inv.paid_date).getTime() <= thirtyDaysMs;
       if (isRecent) {
         recoveredMonthPence += inv.amount_pence;
       }
-    } else if (["overdue", "promised", "disputed", "escalated"].includes(inv.status)) {
+    } else if (['overdue', 'promised', 'disputed', 'escalated'].includes(inv.status)) {
       totalOverduePence += inv.amount_pence;
       overdueCount++;
 
-      if (inv.status !== "disputed") {
+      if (inv.status !== 'disputed') {
         activeChasingPence += inv.amount_pence;
       }
 
@@ -315,32 +325,38 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
      JOIN invoices i ON i.id = cl.invoice_id
      WHERE i.client_id = ?1
      ORDER BY COALESCE(cl.reviewed_at, cl.sent_at) DESC
-     LIMIT 10`,
-  ).bind(clientId).all<{
-    id: number;
-    step: number;
-    channel: string;
-    subject: string | null;
-    status: string;
-    sent_at: string;
-    reviewed_at: string | null;
-    invoice_number: string;
-    debtor_name: string;
-    amount_pence: number;
-    currency: string;
-  }>();
+     LIMIT 10`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      step: number;
+      channel: string;
+      subject: string | null;
+      status: string;
+      sent_at: string;
+      reviewed_at: string | null;
+      invoice_number: string;
+      debtor_name: string;
+      amount_pence: number;
+      currency: string;
+    }>();
 
   const recentActivity = (activityRows.results ?? []).map((row) => {
-    const isSent = row.status === "sent";
-    const isDraft = row.status === "draft";
+    const isSent = row.status === 'sent';
+    const isDraft = row.status === 'draft';
     return {
       id: `chase_${row.id}`,
-      type: isSent ? "sent" : isDraft ? "draft" : "skipped",
-      title: isSent ? `Stage ${row.step} dispatched` : isDraft ? `Stage ${row.step} staged` : `Stage ${row.step} skipped`,
+      type: isSent ? 'sent' : isDraft ? 'draft' : 'skipped',
+      title: isSent
+        ? `Stage ${row.step} dispatched`
+        : isDraft
+          ? `Stage ${row.step} staged`
+          : `Stage ${row.step} skipped`,
       detail: `${row.invoice_number} (${row.debtor_name})`,
       amountPence: row.amount_pence,
       amount: formatMoney(row.amount_pence, row.currency),
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       timestamp: row.reviewed_at || row.sent_at,
       time: row.reviewed_at || row.sent_at,
     };
@@ -350,8 +366,8 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
     {
       ok: true,
       clientId,
-      companyName: client?.company_name ?? "Client",
-      plan: client?.plan ?? "engine",
+      companyName: client?.company_name ?? 'Client',
+      plan: client?.plan ?? 'engine',
       metrics: {
         totalOverduePence,
         activeChasingPence,
@@ -365,14 +381,38 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
         overdueCount,
       },
       agingBreakdown: {
-        bucket1_to_7: { amountPence: b1Pence, count: b1Count, percentage: p1, days: "1-7d", stage: 1 },
-        bucket8_to_14: { amountPence: b2Pence, count: b2Count, percentage: p2, days: "8-14d", stage: 2 },
-        bucket15_to_21: { amountPence: b3Pence, count: b3Count, percentage: p3, days: "15-21d", stage: 3 },
-        bucket22_plus: { amountPence: b4Pence, count: b4Count, percentage: p4, days: "22d+", stage: 4 },
-        bucket1: { amountPence: b1Pence, count: b1Count, percentage: p1, days: "1-7d", stage: 1 },
-        bucket2: { amountPence: b2Pence, count: b2Count, percentage: p2, days: "8-14d", stage: 2 },
-        bucket3: { amountPence: b3Pence, count: b3Count, percentage: p3, days: "15-21d", stage: 3 },
-        bucket4: { amountPence: b4Pence, count: b4Count, percentage: p4, days: "22d+", stage: 4 },
+        bucket1_to_7: {
+          amountPence: b1Pence,
+          count: b1Count,
+          percentage: p1,
+          days: '1-7d',
+          stage: 1,
+        },
+        bucket8_to_14: {
+          amountPence: b2Pence,
+          count: b2Count,
+          percentage: p2,
+          days: '8-14d',
+          stage: 2,
+        },
+        bucket15_to_21: {
+          amountPence: b3Pence,
+          count: b3Count,
+          percentage: p3,
+          days: '15-21d',
+          stage: 3,
+        },
+        bucket22_plus: {
+          amountPence: b4Pence,
+          count: b4Count,
+          percentage: p4,
+          days: '22d+',
+          stage: 4,
+        },
+        bucket1: { amountPence: b1Pence, count: b1Count, percentage: p1, days: '1-7d', stage: 1 },
+        bucket2: { amountPence: b2Pence, count: b2Count, percentage: p2, days: '8-14d', stage: 2 },
+        bucket3: { amountPence: b3Pence, count: b3Count, percentage: p3, days: '15-21d', stage: 3 },
+        bucket4: { amountPence: b4Pence, count: b4Count, percentage: p4, days: '22d+', stage: 4 },
       },
       pipeline: {
         count: overdueCount,
@@ -380,7 +420,7 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
       },
       recentActivity,
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }
 
@@ -394,18 +434,23 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
   if (clientId === null) {
     return Response.json(
       { ok: true, clientId: null, debtors: [], total: 0, page: 1, limit: 50, totalPages: 1 },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
   const url = new URL(request.url);
-  const search = (url.searchParams.get("search") || url.searchParams.get("q") || "").trim().toLowerCase();
-  const stageFilter = (url.searchParams.get("stage") || "all").toLowerCase();
-  const statusFilter = (url.searchParams.get("status") || "all").toLowerCase();
-  const sortCol = (url.searchParams.get("sort") || "days_overdue").toLowerCase();
-  const sortDir = (url.searchParams.get("dir") || "desc").toLowerCase() === "asc" ? "asc" : "desc";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "50", 10) || 50));
+  const search = (url.searchParams.get('search') || url.searchParams.get('q') || '')
+    .trim()
+    .toLowerCase();
+  const stageFilter = (url.searchParams.get('stage') || 'all').toLowerCase();
+  const statusFilter = (url.searchParams.get('status') || 'all').toLowerCase();
+  const sortCol = (url.searchParams.get('sort') || 'days_overdue').toLowerCase();
+  const sortDir = (url.searchParams.get('dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50)
+  );
 
   const rows = await env.DB.prepare(
     `SELECT
@@ -423,30 +468,32 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
        (SELECT MAX(cl.step) FROM chase_log cl WHERE cl.invoice_id = i.id) AS max_chase_step,
        (SELECT cl.sent_at FROM chase_log cl WHERE cl.invoice_id = i.id AND cl.status = 'sent' ORDER BY cl.sent_at DESC LIMIT 1) AS last_contact_at
      FROM invoices i
-     WHERE i.client_id = ?1`,
-  ).bind(clientId).all<{
-    id: number;
-    client_id: number;
-    debtor_name: string;
-    debtor_email: string | null;
-    invoice_number: string;
-    amount_pence: number;
-    currency: string;
-    due_date: string;
-    issued_date: string | null;
-    status: string;
-    paid_date: string | null;
-    max_chase_step: number | null;
-    last_contact_at: string | null;
-  }>();
+     WHERE i.client_id = ?1`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      client_id: number;
+      debtor_name: string;
+      debtor_email: string | null;
+      invoice_number: string;
+      amount_pence: number;
+      currency: string;
+      due_date: string;
+      issued_date: string | null;
+      status: string;
+      paid_date: string | null;
+      max_chase_step: number | null;
+      last_contact_at: string | null;
+    }>();
 
   let debtors = (rows.results ?? []).map((row) => {
     const daysOverdue = calculateDaysOverdue(row.due_date);
     const { stage, label } = deriveStage(daysOverdue, row.max_chase_step);
 
-    let lastContact = "No contact yet";
-    if (row.status === "paid") {
-      lastContact = "Settled in full";
+    let lastContact = 'No contact yet';
+    if (row.status === 'paid') {
+      lastContact = 'Settled in full';
     } else if (row.last_contact_at) {
       lastContact = row.last_contact_at;
     }
@@ -457,7 +504,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       debtor_name: row.debtor_name,
       debtor_email: row.debtor_email,
       amount_pence: row.amount_pence,
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       due_date: row.due_date,
       issued_date: row.issued_date,
       days_overdue: daysOverdue,
@@ -474,18 +521,18 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       (d) =>
         d.debtor_name.toLowerCase().includes(search) ||
         d.invoice_number.toLowerCase().includes(search) ||
-        (d.debtor_email && d.debtor_email.toLowerCase().includes(search)),
+        (d.debtor_email && d.debtor_email.toLowerCase().includes(search))
     );
   }
 
   // 2. Stage Filter
-  if (stageFilter !== "all") {
+  if (stageFilter !== 'all') {
     let targetStage: number | null = null;
-    if (stageFilter === "1" || stageFilter === "stage_1") targetStage = 1;
-    else if (stageFilter === "2" || stageFilter === "stage_2") targetStage = 2;
-    else if (stageFilter === "3" || stageFilter === "stage_3") targetStage = 3;
-    else if (stageFilter === "4" || stageFilter === "stage_4") targetStage = 4;
-    else if (stageFilter === "0" || stageFilter === "current") targetStage = 0;
+    if (stageFilter === '1' || stageFilter === 'stage_1') targetStage = 1;
+    else if (stageFilter === '2' || stageFilter === 'stage_2') targetStage = 2;
+    else if (stageFilter === '3' || stageFilter === 'stage_3') targetStage = 3;
+    else if (stageFilter === '4' || stageFilter === 'stage_4') targetStage = 4;
+    else if (stageFilter === '0' || stageFilter === 'current') targetStage = 0;
 
     if (targetStage !== null) {
       debtors = debtors.filter((d) => d.stage === targetStage);
@@ -493,7 +540,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
   }
 
   // 3. Status Filter
-  if (statusFilter !== "all") {
+  if (statusFilter !== 'all') {
     debtors = debtors.filter((d) => d.status.toLowerCase() === statusFilter);
   }
 
@@ -502,28 +549,28 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
     let valA: string | number = a.days_overdue;
     let valB: string | number = b.days_overdue;
 
-    if (sortCol === "amount" || sortCol === "amount_pence") {
+    if (sortCol === 'amount' || sortCol === 'amount_pence') {
       valA = a.amount_pence;
       valB = b.amount_pence;
-    } else if (sortCol === "due_date") {
+    } else if (sortCol === 'due_date') {
       valA = a.due_date;
       valB = b.due_date;
-    } else if (sortCol === "debtor_name") {
+    } else if (sortCol === 'debtor_name') {
       valA = a.debtor_name.toLowerCase();
       valB = b.debtor_name.toLowerCase();
-    } else if (sortCol === "invoice_number") {
+    } else if (sortCol === 'invoice_number') {
       valA = a.invoice_number.toLowerCase();
       valB = b.invoice_number.toLowerCase();
-    } else if (sortCol === "status") {
+    } else if (sortCol === 'status') {
       valA = a.status.toLowerCase();
       valB = b.status.toLowerCase();
-    } else if (sortCol === "stage") {
+    } else if (sortCol === 'stage') {
       valA = a.stage;
       valB = b.stage;
     }
 
-    if (valA < valB) return sortDir === "asc" ? -1 : 1;
-    if (valA > valB) return sortDir === "asc" ? 1 : -1;
+    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
     return 0;
   });
 
@@ -541,7 +588,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }
 
@@ -552,14 +599,14 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
-  const boeBaseRate = Number(env.BOE_BASE_RATE_PERCENT || "3.75");
-  const queryParamCid = new URL(request.url).searchParams.get("client_id");
+  const boeBaseRate = Number(env.BOE_BASE_RATE_PERCENT || '3.75');
+  const queryParamCid = new URL(request.url).searchParams.get('client_id');
 
   // Determine clientId scope:
   // If client session, lock to auth.clientId. If admin, optionally filter by queryParamCid.
@@ -617,17 +664,18 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
   const drafts = (rows.results ?? []).map((row) => {
     const daysOverdue = calculateDaysOverdue(row.due_date);
     const compensationPence = fixedCompensationPence(row.amount_pence);
-    const interestPence = daysOverdue <= 0 ? 0 : statutoryInterestPence(row.amount_pence, daysOverdue, boeBaseRate);
+    const interestPence =
+      daysOverdue <= 0 ? 0 : statutoryInterestPence(row.amount_pence, daysOverdue, boeBaseRate);
     const totalClaimPence = row.amount_pence + compensationPence + interestPence;
 
     const stepLabel =
       row.step === 1
-        ? "Stage 1 (Gentle)"
+        ? 'Stage 1 (Gentle)'
         : row.step === 2
-        ? "Stage 2 (Follow-up)"
-        : row.step === 3
-        ? "Stage 3 (Firm Notice)"
-        : "Stage 4 (Final Notice)";
+          ? 'Stage 2 (Follow-up)'
+          : row.step === 3
+            ? 'Stage 3 (Firm Notice)'
+            : 'Stage 4 (Final Notice)';
 
     return {
       id: row.id,
@@ -637,13 +685,13 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
       debtor_email: row.debtor_email,
       client_id: row.client_id,
       company_name: row.company_name,
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       due_date: row.due_date,
       days_overdue: daysOverdue,
       step: row.step,
       step_label: stepLabel,
       subject: row.subject,
-      body: row.body ?? "",
+      body: row.body ?? '',
       locked_sender: env.NOTIFY_FROM || LOCKED_SENDER_EMAIL,
       amount_pence: row.amount_pence,
       principal_pence: row.amount_pence,
@@ -663,20 +711,23 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
 export async function handleApproveDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   const row = await env.DB.prepare(
@@ -686,65 +737,67 @@ export async function handleApproveDraft(
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
      JOIN clients c ON c.id = i.client_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{
-    id: number;
-    body: string | null;
-    subject: string | null;
-    status: string;
-    step: number;
-    invoice_id: number;
-    debtor_email: string | null;
-    debtor_name: string;
-    invoice_number: string;
-    client_id: number;
-    company_name: string;
-  }>();
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{
+      id: number;
+      body: string | null;
+      subject: string | null;
+      status: string;
+      step: number;
+      invoice_id: number;
+      debtor_email: string | null;
+      debtor_name: string;
+      invoice_number: string;
+      client_id: number;
+      company_name: string;
+    }>();
 
-  if (!row || row.status !== "draft") {
+  if (!row || row.status !== 'draft') {
     return Response.json(
-      { ok: false, error: "Draft not found or already reviewed." },
-      { status: 404, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
     );
   }
 
   // Tenant Boundary Check: Client sessions cannot approve another tenant's draft
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot approve draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot approve draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
   if (!row.debtor_email) {
     return Response.json(
-      { ok: false, error: "Invoice has no debtor email on file." },
-      { status: 422, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Invoice has no debtor email on file.' },
+      { status: 422, headers: SECURITY_HEADERS }
     );
   }
 
   // Extract optional edited message body (supports both JSON and form URL-encoded)
-  let body = row.body ?? "";
-  const contentType = request.headers.get("Content-Type") ?? "";
+  let body = row.body ?? '';
+  const contentType = request.headers.get('Content-Type') ?? '';
 
-  if (contentType.includes("application/json")) {
+  if (contentType.includes('application/json')) {
     try {
-      const json = await request.json();
+      const json = (await request.json()) as any;
       const edited = (json.body ?? json.custom_message) as string | undefined;
-      if (typeof edited === "string" && edited.trim()) {
+      if (typeof edited === 'string' && edited.trim()) {
         body = edited;
       }
     } catch {
       // Ignore unparseable JSON and keep current body
     }
   } else if (
-    contentType.includes("application/x-www-form-urlencoded") ||
-    contentType.includes("multipart/form-data")
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
   ) {
     try {
       const form = await request.formData();
-      const edited = form.get("body") ?? form.get("custom_message");
-      if (typeof edited === "string" && edited.trim()) {
+      const edited = form.get('body') ?? form.get('custom_message');
+      if (typeof edited === 'string' && edited.trim()) {
         body = edited;
       }
     } catch {
@@ -757,17 +810,17 @@ export async function handleApproveDraft(
     env,
     row.debtor_email,
     row.subject ?? `Re: Invoice ${row.invoice_number}`,
-    body,
+    body
   );
 
   if (!sent) {
     return Response.json(
-      { ok: false, error: "Failed to dispatch email communication to debtor." },
-      { status: 500, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Failed to dispatch email communication to debtor.' },
+      { status: 500, headers: SECURITY_HEADERS }
     );
   }
 
-  const reviewerName = env.OPERATOR_NAME || "Tibor Rames";
+  const reviewerName = env.OPERATOR_NAME || 'Tibor Rames';
 
   await env.DB.prepare(
     `UPDATE chase_log
@@ -777,24 +830,26 @@ export async function handleApproveDraft(
          sent_at = datetime('now'),
          reviewed_at = datetime('now'),
          reviewed_by = ?3
-     WHERE id = ?1 AND status = 'draft'`,
-  ).bind(draftId, body, reviewerName).run();
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, body, reviewerName)
+    .run();
 
-  const accepts = request.headers.get("Accept") ?? "";
-  if (accepts.includes("application/json")) {
+  const accepts = request.headers.get('Accept') ?? '';
+  if (accepts.includes('application/json')) {
     return Response.json(
       {
         ok: true,
         draft_id: draftId,
-        status: "sent",
+        status: 'sent',
         recipient: row.debtor_email,
         sent_at: new Date().toISOString(),
       },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
-  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
+  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: '/admin' } });
 }
 
 // ============================================================================
@@ -803,60 +858,70 @@ export async function handleApproveDraft(
 export async function handleSkipDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   const row = await env.DB.prepare(
     `SELECT cl.id, cl.status, i.client_id
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{ id: number; status: string; client_id: number }>();
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{ id: number; status: string; client_id: number }>();
 
   if (!row) {
-    return Response.json({ ok: false, error: "Draft not found." }, { status: 404, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Draft not found.' },
+      { status: 404, headers: SECURITY_HEADERS }
+    );
   }
 
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot skip draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot skip draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
-  if (row.status === "draft") {
-    const reviewerName = env.OPERATOR_NAME || "Tibor Rames";
+  if (row.status === 'draft') {
+    const reviewerName = env.OPERATOR_NAME || 'Tibor Rames';
     await env.DB.prepare(
       `UPDATE chase_log
        SET status = 'skipped',
            reviewed_at = datetime('now'),
            reviewed_by = ?2
-       WHERE id = ?1 AND status = 'draft'`,
-    ).bind(draftId, reviewerName).run();
+       WHERE id = ?1 AND status = 'draft'`
+    )
+      .bind(draftId, reviewerName)
+      .run();
   }
 
-  const accepts = request.headers.get("Accept") ?? "";
-  if (accepts.includes("application/json")) {
+  const accepts = request.headers.get('Accept') ?? '';
+  if (accepts.includes('application/json')) {
     return Response.json(
-      { ok: true, draft_id: draftId, status: "skipped" },
-      { headers: SECURITY_HEADERS },
+      { ok: true, draft_id: draftId, status: 'skipped' },
+      { headers: SECURITY_HEADERS }
     );
   }
 
-  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
+  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: '/admin' } });
 }
 
 // ============================================================================
@@ -865,47 +930,56 @@ export async function handleSkipDraft(
 export async function handleUpdateDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   let body: string | null = null;
   let subject: string | null = null;
 
-  const contentType = request.headers.get("Content-Type") ?? "";
-  if (contentType.includes("application/json")) {
+  const contentType = request.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/json')) {
     try {
-      const json = await request.json();
-      if (typeof json.body === "string") body = json.body;
-      else if (typeof json.custom_message === "string") body = json.custom_message;
-      if (typeof json.subject === "string") subject = json.subject;
+      const json = (await request.json()) as any;
+      if (typeof json.body === 'string') body = json.body;
+      else if (typeof json.custom_message === 'string') body = json.custom_message;
+      if (typeof json.subject === 'string') subject = json.subject;
     } catch {
-      return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400, headers: SECURITY_HEADERS });
+      return Response.json(
+        { ok: false, error: 'Invalid JSON body.' },
+        { status: 400, headers: SECURITY_HEADERS }
+      );
     }
   } else if (
-    contentType.includes("application/x-www-form-urlencoded") ||
-    contentType.includes("multipart/form-data")
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
   ) {
     try {
       const form = await request.formData();
-      const b = form.get("body") ?? form.get("custom_message");
-      if (typeof b === "string") body = b;
-      const s = form.get("subject");
-      if (typeof s === "string") subject = s;
+      const b = form.get('body') ?? form.get('custom_message');
+      if (typeof b === 'string') body = b;
+      const s = form.get('subject');
+      if (typeof s === 'string') subject = s;
     } catch {
-      return Response.json({ ok: false, error: "Invalid form body." }, { status: 400, headers: SECURITY_HEADERS });
+      return Response.json(
+        { ok: false, error: 'Invalid form body.' },
+        { status: 400, headers: SECURITY_HEADERS }
+      );
     }
   } else {
     try {
@@ -918,8 +992,8 @@ export async function handleUpdateDraft(
 
   if (!body?.trim()) {
     return Response.json(
-      { ok: false, error: "Draft body cannot be empty." },
-      { status: 400, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft body cannot be empty.' },
+      { status: 400, headers: SECURITY_HEADERS }
     );
   }
 
@@ -927,20 +1001,22 @@ export async function handleUpdateDraft(
     `SELECT cl.id, cl.status, cl.subject, i.client_id
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{ id: number; status: string; subject: string | null; client_id: number }>();
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{ id: number; status: string; subject: string | null; client_id: number }>();
 
-  if (!row || row.status !== "draft") {
+  if (!row || row.status !== 'draft') {
     return Response.json(
-      { ok: false, error: "Draft not found or already reviewed." },
-      { status: 404, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
     );
   }
 
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot edit draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot edit draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
@@ -950,8 +1026,10 @@ export async function handleUpdateDraft(
     `UPDATE chase_log
      SET body = ?2,
          subject = COALESCE(?3, subject)
-     WHERE id = ?1 AND status = 'draft'`,
-  ).bind(draftId, body, updatedSubject).run();
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, body, updatedSubject)
+    .run();
 
   return Response.json(
     {
@@ -960,6 +1038,6 @@ export async function handleUpdateDraft(
       body,
       subject: updatedSubject,
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }

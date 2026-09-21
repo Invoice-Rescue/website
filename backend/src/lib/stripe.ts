@@ -4,23 +4,23 @@
  * onboarding, mint a billing-portal session, and verify webhook signatures.
  */
 
-const STRIPE_API_BASE = "https://api.stripe.com/v1";
+const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
 /** Best-effort: returns the new customer id, or null if Stripe rejects/errors (caller must not block on this). */
 export async function createCustomer(
   secretKey: string,
-  input: { name: string; email: string },
+  input: { name: string; email: string }
 ): Promise<string | null> {
   const res = await fetch(`${STRIPE_API_BASE}/customers`, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({ name: input.name, email: input.email }),
   });
   if (!res.ok) return null;
-  const data = (await res.json());
+  const data = (await res.json()) as any;
   return data.id ?? null;
 }
 
@@ -28,18 +28,18 @@ export async function createCustomer(
 export async function createBillingPortalSession(
   secretKey: string,
   customerId: string,
-  returnUrl: string,
+  returnUrl: string
 ): Promise<string | null> {
   const res = await fetch(`${STRIPE_API_BASE}/billing_portal/sessions`, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${secretKey}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({ customer: customerId, return_url: returnUrl }),
   });
   if (!res.ok) return null;
-  const data = (await res.json());
+  const data = (await res.json()) as any;
   return data.url ?? null;
 }
 
@@ -54,17 +54,17 @@ function hexToBytes(hex: string): Uint8Array {
 export async function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
-  webhookSecret: string,
+  webhookSecret: string
 ): Promise<boolean> {
   if (!signatureHeader) return false;
   // Fail closed if STRIPE_WEBHOOK_SECRET is unset, same reasoning as portal-auth.ts's hmacKey.
   if (!webhookSecret) return false;
 
   const parts = Object.fromEntries(
-    signatureHeader.split(",").map((kv) => {
-      const [k, v] = kv.split("=");
+    signatureHeader.split(',').map((kv) => {
+      const [k, v] = kv.split('=');
       return [k, v];
-    }),
+    })
   );
   const timestamp = parts.t;
   const v1 = parts.v1;
@@ -75,13 +75,18 @@ export async function verifyWebhookSignature(
   if (!Number.isFinite(age) || age > toleranceSeconds || age < -toleranceSeconds) return false;
 
   const key = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     new TextEncoder().encode(webhookSecret),
-    { name: "HMAC", hash: "SHA-256" },
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ["verify"],
+    ['verify']
   );
-  return crypto.subtle.verify("HMAC", key, hexToBytes(v1), new TextEncoder().encode(`${timestamp}.${rawBody}`));
+  return crypto.subtle.verify(
+    'HMAC',
+    key,
+    hexToBytes(v1),
+    new TextEncoder().encode(`${timestamp}.${rawBody}`)
+  );
 }
 
 export interface StripeSubscriptionEvent {

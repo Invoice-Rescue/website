@@ -5,7 +5,12 @@
  * and halts automated chasing on paid or disputed invoices.
  */
 
-import { decryptToken, encryptToken, refreshProviderTokens, revokeProviderToken } from './oauth-manager';
+import {
+  decryptToken,
+  encryptToken,
+  refreshProviderTokens,
+  revokeProviderToken,
+} from './oauth-manager';
 import { validateClientId } from '../tenant-repo';
 
 export interface NormalizedInvoice {
@@ -15,10 +20,10 @@ export interface NormalizedInvoice {
   debtorEmail: string | null;
   amountPence: number;
   currency: string;
-  dueDate: string;          // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
   issuedDate: string | null; // YYYY-MM-DD
   isPaid: boolean;
-  paidDate: string | null;  // YYYY-MM-DD
+  paidDate: string | null; // YYYY-MM-DD
   isDisputedOrVoid: boolean;
 }
 
@@ -54,7 +59,7 @@ export class SyncService {
   private getEncryptionSecret(): string {
     const secret = (this.env as any).TOKEN_ENCRYPTION_SECRET || this.env.PORTAL_SESSION_SECRET;
     if (!secret) {
-      throw new Error("TOKEN_ENCRYPTION_SECRET configuration error: secret is missing.");
+      throw new Error('TOKEN_ENCRYPTION_SECRET configuration error: secret is missing.');
     }
     return secret;
   }
@@ -65,13 +70,16 @@ export class SyncService {
   async syncInvoices(clientId: number): Promise<SyncResult> {
     validateClientId(clientId);
 
-    const conn = await this.db.prepare(
-      `SELECT id, client_id, provider, tenant_id, access_token_encrypted,
+    const conn = await this.db
+      .prepare(
+        `SELECT id, client_id, provider, tenant_id, access_token_encrypted,
               refresh_token_encrypted, expires_at, status
        FROM accounting_connections
        WHERE client_id = ?1 AND status = 'active'
        ORDER BY id DESC`
-    ).bind(clientId).first<DBConnectionRow>();
+      )
+      .bind(clientId)
+      .first<DBConnectionRow>();
 
     if (!conn) {
       return {
@@ -101,7 +109,7 @@ export class SyncService {
     }
 
     // Fetch invoices from provider
-    let normalizedInvoices: NormalizedInvoice[] = [];
+    let normalizedInvoices: NormalizedInvoice[];
     try {
       if (conn.provider === 'xero') {
         normalizedInvoices = await this.fetchXeroInvoices(accessToken, conn.tenant_id ?? '');
@@ -139,9 +147,10 @@ export class SyncService {
     }
 
     // Update connection last_synced_at
-    await this.db.prepare(
-      `UPDATE accounting_connections SET last_synced_at = datetime('now') WHERE id = ?1`
-    ).bind(conn.id).run();
+    await this.db
+      .prepare(`UPDATE accounting_connections SET last_synced_at = datetime('now') WHERE id = ?1`)
+      .bind(conn.id)
+      .run();
 
     return {
       success: true,
@@ -165,12 +174,15 @@ export class SyncService {
     validateClientId(clientId);
     if (!externalInvoiceId) return false;
 
-    const conn = await this.db.prepare(
-      `SELECT id, client_id, provider, tenant_id, access_token_encrypted,
+    const conn = await this.db
+      .prepare(
+        `SELECT id, client_id, provider, tenant_id, access_token_encrypted,
               refresh_token_encrypted, expires_at, status
        FROM accounting_connections
        WHERE client_id = ?1 AND provider = ?2 AND status = 'active'`
-    ).bind(clientId, provider).first<DBConnectionRow>();
+      )
+      .bind(clientId, provider)
+      .first<DBConnectionRow>();
 
     if (!conn) return false;
 
@@ -178,12 +190,20 @@ export class SyncService {
     const accessToken = await this.resolveFreshAccessToken(conn, secretKey);
     if (!accessToken) return false;
 
-    let norm: NormalizedInvoice | null = null;
+    let norm: NormalizedInvoice | null;
     try {
       if (provider === 'xero') {
-        norm = await this.fetchSingleXeroInvoice(accessToken, conn.tenant_id ?? '', externalInvoiceId);
+        norm = await this.fetchSingleXeroInvoice(
+          accessToken,
+          conn.tenant_id ?? '',
+          externalInvoiceId
+        );
       } else {
-        norm = await this.fetchSingleQuickBooksInvoice(accessToken, conn.tenant_id ?? '', externalInvoiceId);
+        norm = await this.fetchSingleQuickBooksInvoice(
+          accessToken,
+          conn.tenant_id ?? '',
+          externalInvoiceId
+        );
       }
     } catch {
       return false;
@@ -200,16 +220,26 @@ export class SyncService {
    */
   async revokeConnection(clientId: number, provider: 'xero' | 'quickbooks'): Promise<boolean> {
     validateClientId(clientId);
-    const conn = await this.db.prepare(
-      `SELECT id, refresh_token_encrypted FROM accounting_connections WHERE client_id = ?1 AND provider = ?2`
-    ).bind(clientId, provider).first<{ id: number; refresh_token_encrypted: string }>();
+    const conn = await this.db
+      .prepare(
+        `SELECT id, refresh_token_encrypted FROM accounting_connections WHERE client_id = ?1 AND provider = ?2`
+      )
+      .bind(clientId, provider)
+      .first<{ id: number; refresh_token_encrypted: string }>();
 
     if (!conn) return false;
 
     const secretKey = this.getEncryptionSecret();
-    const creds = provider === 'xero'
-      ? { clientId: (this.env as any).XERO_CLIENT_ID || '', clientSecret: (this.env as any).XERO_CLIENT_SECRET || '' }
-      : { clientId: (this.env as any).QUICKBOOKS_CLIENT_ID || '', clientSecret: (this.env as any).QUICKBOOKS_CLIENT_SECRET || '' };
+    const creds =
+      provider === 'xero'
+        ? {
+            clientId: (this.env as any).XERO_CLIENT_ID || '',
+            clientSecret: (this.env as any).XERO_CLIENT_SECRET || '',
+          }
+        : {
+            clientId: (this.env as any).QUICKBOOKS_CLIENT_ID || '',
+            clientSecret: (this.env as any).QUICKBOOKS_CLIENT_SECRET || '',
+          };
 
     try {
       const refreshToken = await decryptToken(conn.refresh_token_encrypted, secretKey);
@@ -219,9 +249,12 @@ export class SyncService {
     }
 
     await this.db.prepare(`DELETE FROM accounting_connections WHERE id = ?1`).bind(conn.id).run();
-    await this.db.prepare(
-      `UPDATE clients SET accounting_source = NULL WHERE id = ?1 AND accounting_source = ?2`
-    ).bind(clientId, provider).run();
+    await this.db
+      .prepare(
+        `UPDATE clients SET accounting_source = NULL WHERE id = ?1 AND accounting_source = ?2`
+      )
+      .bind(clientId, provider)
+      .run();
 
     return true;
   }
@@ -233,41 +266,48 @@ export class SyncService {
     clientId: number,
     norm: NormalizedInvoice
   ): Promise<'created' | 'updated' | 'marked_paid' | 'unchanged'> {
-    const existing = await this.db.prepare(
-      `SELECT id, invoice_number, amount_pence, status, due_date, paid_date
+    const existing = await this.db
+      .prepare(
+        `SELECT id, invoice_number, amount_pence, status, due_date, paid_date
        FROM invoices
        WHERE client_id = ?1 AND invoice_number = ?2`
-    ).bind(clientId, norm.invoiceNumber).first<{
-      id: number;
-      invoice_number: string;
-      amount_pence: number;
-      status: string;
-      due_date: string;
-      paid_date: string | null;
-    }>();
+      )
+      .bind(clientId, norm.invoiceNumber)
+      .first<{
+        id: number;
+        invoice_number: string;
+        amount_pence: number;
+        status: string;
+        due_date: string;
+        paid_date: string | null;
+      }>();
 
     if (existing) {
       // 1. Invoice is Settled / Paid in external provider
       if (norm.isPaid) {
         if (existing.status !== 'paid') {
           await this.db.batch([
-            this.db.prepare(
-              `UPDATE invoices
+            this.db
+              .prepare(
+                `UPDATE invoices
                SET status = 'paid',
                    paid_date = COALESCE(?1, date('now')),
                    amount_pence = ?2,
                    external_id = ?3,
                    last_synced_at = datetime('now')
                WHERE id = ?4`
-            ).bind(norm.paidDate, norm.amountPence, norm.externalId, existing.id),
+              )
+              .bind(norm.paidDate, norm.amountPence, norm.externalId, existing.id),
 
             // Halt automated chases on paid invoice: cancel pending review-queue drafts
-            this.db.prepare(
-              `UPDATE chase_log
+            this.db
+              .prepare(
+                `UPDATE chase_log
                SET status = 'skipped',
                    reviewed_at = datetime('now')
                WHERE invoice_id = ?1 AND status = 'draft'`
-            ).bind(existing.id),
+              )
+              .bind(existing.id),
           ]);
           return 'marked_paid';
         }
@@ -278,20 +318,24 @@ export class SyncService {
       if (norm.isDisputedOrVoid) {
         if (existing.status !== 'disputed') {
           await this.db.batch([
-            this.db.prepare(
-              `UPDATE invoices
+            this.db
+              .prepare(
+                `UPDATE invoices
                SET status = 'disputed',
                    external_id = ?1,
                    last_synced_at = datetime('now')
                WHERE id = ?2`
-            ).bind(norm.externalId, existing.id),
+              )
+              .bind(norm.externalId, existing.id),
 
-            this.db.prepare(
-              `UPDATE chase_log
+            this.db
+              .prepare(
+                `UPDATE chase_log
                SET status = 'skipped',
                    reviewed_at = datetime('now')
                WHERE invoice_id = ?1 AND status = 'draft'`
-            ).bind(existing.id),
+              )
+              .bind(existing.id),
           ]);
           return 'updated';
         }
@@ -300,8 +344,9 @@ export class SyncService {
 
       // 3. Invoice remains active / overdue - update details if changed, but protect paid invoices!
       if (existing.status !== 'paid') {
-        await this.db.prepare(
-          `UPDATE invoices
+        await this.db
+          .prepare(
+            `UPDATE invoices
            SET amount_pence = ?1,
                due_date = ?2,
                debtor_name = ?3,
@@ -309,7 +354,16 @@ export class SyncService {
                external_id = ?5,
                last_synced_at = datetime('now')
            WHERE id = ?6`
-        ).bind(norm.amountPence, norm.dueDate, norm.debtorName, norm.debtorEmail, norm.externalId, existing.id).run();
+          )
+          .bind(
+            norm.amountPence,
+            norm.dueDate,
+            norm.debtorName,
+            norm.debtorEmail,
+            norm.externalId,
+            existing.id
+          )
+          .run();
         return 'updated';
       }
 
@@ -318,11 +372,36 @@ export class SyncService {
 
     // Invoice does not exist in D1 yet
     if (norm.isPaid) {
-      await this.db.prepare(
-        `INSERT INTO invoices
+      await this.db
+        .prepare(
+          `INSERT INTO invoices
          (client_id, debtor_name, debtor_email, invoice_number, amount_pence, currency, issued_date, due_date, status, paid_date, external_id, last_synced_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'paid', COALESCE(?9, date('now')), ?10, datetime('now'))`
-      ).bind(
+        )
+        .bind(
+          clientId,
+          norm.debtorName,
+          norm.debtorEmail,
+          norm.invoiceNumber,
+          norm.amountPence,
+          norm.currency,
+          norm.issuedDate,
+          norm.dueDate,
+          norm.paidDate,
+          norm.externalId
+        )
+        .run();
+      return 'created';
+    }
+
+    // Insert active overdue record
+    await this.db
+      .prepare(
+        `INSERT INTO invoices
+       (client_id, debtor_name, debtor_email, invoice_number, amount_pence, currency, issued_date, due_date, status, external_id, last_synced_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'overdue', ?9, datetime('now'))`
+      )
+      .bind(
         clientId,
         norm.debtorName,
         norm.debtorEmail,
@@ -331,44 +410,36 @@ export class SyncService {
         norm.currency,
         norm.issuedDate,
         norm.dueDate,
-        norm.paidDate,
         norm.externalId
-      ).run();
-      return 'created';
-    }
-
-    // Insert active overdue record
-    await this.db.prepare(
-      `INSERT INTO invoices
-       (client_id, debtor_name, debtor_email, invoice_number, amount_pence, currency, issued_date, due_date, status, external_id, last_synced_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'overdue', ?9, datetime('now'))`
-    ).bind(
-      clientId,
-      norm.debtorName,
-      norm.debtorEmail,
-      norm.invoiceNumber,
-      norm.amountPence,
-      norm.currency,
-      norm.issuedDate,
-      norm.dueDate,
-      norm.externalId
-    ).run();
+      )
+      .run();
     return 'created';
   }
 
   /**
    * Resolves token and auto-refreshes if expiring within 5 minutes.
    */
-  private async resolveFreshAccessToken(conn: DBConnectionRow, secretKey: string): Promise<string | null> {
+  private async resolveFreshAccessToken(
+    conn: DBConnectionRow,
+    secretKey: string
+  ): Promise<string | null> {
     const expiresAtMs = new Date(conn.expires_at).getTime();
-    const isExpiringSoon = !Number.isFinite(expiresAtMs) || Date.now() >= expiresAtMs - 5 * 60 * 1000;
+    const isExpiringSoon =
+      !Number.isFinite(expiresAtMs) || Date.now() >= expiresAtMs - 5 * 60 * 1000;
 
     if (isExpiringSoon) {
       try {
         const decryptedRefresh = await decryptToken(conn.refresh_token_encrypted, secretKey);
-        const creds = conn.provider === 'xero'
-          ? { clientId: (this.env as any).XERO_CLIENT_ID || '', clientSecret: (this.env as any).XERO_CLIENT_SECRET || '' }
-          : { clientId: (this.env as any).QUICKBOOKS_CLIENT_ID || '', clientSecret: (this.env as any).QUICKBOOKS_CLIENT_SECRET || '' };
+        const creds =
+          conn.provider === 'xero'
+            ? {
+                clientId: (this.env as any).XERO_CLIENT_ID || '',
+                clientSecret: (this.env as any).XERO_CLIENT_SECRET || '',
+              }
+            : {
+                clientId: (this.env as any).QUICKBOOKS_CLIENT_ID || '',
+                clientSecret: (this.env as any).QUICKBOOKS_CLIENT_SECRET || '',
+              };
 
         const refreshed = await refreshProviderTokens(conn.provider, decryptedRefresh, creds);
 
@@ -376,25 +447,32 @@ export class SyncService {
         const newRefreshEncrypted = await encryptToken(refreshed.refreshToken, secretKey);
         const newExpiresAt = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString();
 
-        await this.db.prepare(
-          `UPDATE accounting_connections
+        await this.db
+          .prepare(
+            `UPDATE accounting_connections
            SET access_token_encrypted = ?1,
                refresh_token_encrypted = ?2,
                expires_at = ?3,
                status = 'active',
                last_synced_at = datetime('now')
            WHERE id = ?4`
-        ).bind(newAccessEncrypted, newRefreshEncrypted, newExpiresAt, conn.id).run();
+          )
+          .bind(newAccessEncrypted, newRefreshEncrypted, newExpiresAt, conn.id)
+          .run();
 
         return refreshed.accessToken;
       } catch (err: any) {
         if (err?.message?.includes('invalid_grant') || err?.message?.includes('revoked')) {
-          await this.db.prepare(
-            `UPDATE accounting_connections SET status = 'revoked' WHERE id = ?1`
-          ).bind(conn.id).run();
+          await this.db
+            .prepare(`UPDATE accounting_connections SET status = 'revoked' WHERE id = ?1`)
+            .bind(conn.id)
+            .run();
           return null;
         }
-        console.warn(`External token refresh/revocation encountered an error for provider ${conn.provider}:`, err);
+        console.warn(
+          `External token refresh/revocation encountered an error for provider ${conn.provider}:`,
+          err
+        );
         // Fall back to existing decrypted token if network error
         try {
           return await decryptToken(conn.access_token_encrypted, secretKey);
@@ -407,12 +485,15 @@ export class SyncService {
     return await decryptToken(conn.access_token_encrypted, secretKey);
   }
 
-  private async fetchXeroInvoices(accessToken: string, tenantId: string): Promise<NormalizedInvoice[]> {
-    const res = await fetch("https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID", {
+  private async fetchXeroInvoices(
+    accessToken: string,
+    tenantId: string
+  ): Promise<NormalizedInvoice[]> {
+    const res = await fetch('https://api.xero.com/api.xro/2.0/Invoices?Statuses=AUTHORISED,PAID', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Xero-tenant-id": tenantId,
-        Accept: "application/json",
+        'Xero-tenant-id': tenantId,
+        Accept: 'application/json',
       },
     });
 
@@ -420,21 +501,25 @@ export class SyncService {
       throw new Error(`Xero API error (${res.status}): ${await res.text()}`);
     }
 
-    const data = (await res.json());
-    return (data.Invoices ?? []).map(inv => this.normalizeXeroInvoice(inv));
+    const data = (await res.json()) as any;
+    return (data.Invoices ?? []).map((inv: any) => this.normalizeXeroInvoice(inv));
   }
 
-  private async fetchSingleXeroInvoice(accessToken: string, tenantId: string, invoiceId: string): Promise<NormalizedInvoice | null> {
+  private async fetchSingleXeroInvoice(
+    accessToken: string,
+    tenantId: string,
+    invoiceId: string
+  ): Promise<NormalizedInvoice | null> {
     const res = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Xero-tenant-id": tenantId,
-        Accept: "application/json",
+        'Xero-tenant-id': tenantId,
+        Accept: 'application/json',
       },
     });
 
     if (!res.ok) return null;
-    const data = (await res.json());
+    const data = (await res.json()) as any;
     const inv = data.Invoices?.[0];
     return inv ? this.normalizeXeroInvoice(inv) : null;
   }
@@ -442,7 +527,8 @@ export class SyncService {
   private normalizeXeroInvoice(inv: any): NormalizedInvoice {
     const amountDue = typeof inv.AmountDue === 'number' ? inv.AmountDue : (inv.Total ?? 0);
     const amountPence = Math.max(1, Math.round(amountDue * 100));
-    const isPaid = inv.Status === 'PAID' || (typeof inv.AmountDue === 'number' && inv.AmountDue <= 0);
+    const isPaid =
+      inv.Status === 'PAID' || (typeof inv.AmountDue === 'number' && inv.AmountDue <= 0);
     const isDisputedOrVoid = inv.Status === 'VOIDED' || inv.Status === 'DELETED';
 
     const parseXeroDate = (raw: string | undefined): string => {
@@ -464,38 +550,57 @@ export class SyncService {
       dueDate: parseXeroDate(inv.DueDateString || inv.DueDate),
       issuedDate: parseXeroDate(inv.DateString || inv.Date),
       isPaid,
-      paidDate: isPaid ? (inv.FullyPaidOnDate ? parseXeroDate(inv.FullyPaidOnDate) : new Date().toISOString().slice(0, 10)) : null,
+      paidDate: isPaid
+        ? inv.FullyPaidOnDate
+          ? parseXeroDate(inv.FullyPaidOnDate)
+          : new Date().toISOString().slice(0, 10)
+        : null,
       isDisputedOrVoid,
     };
   }
 
-  private async fetchQuickBooksInvoices(accessToken: string, realmId: string): Promise<NormalizedInvoice[]> {
-    const query = encodeURIComponent("SELECT * FROM Invoice MAXRESULTS 1000");
-    const res = await fetch(`https://quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    });
+  private async fetchQuickBooksInvoices(
+    accessToken: string,
+    realmId: string
+  ): Promise<NormalizedInvoice[]> {
+    const query = encodeURIComponent('SELECT * FROM Invoice MAXRESULTS 1000');
+    const res = await fetch(
+      `https://quickbooks.api.intuit.com/v3/company/${realmId}/query?query=${query}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      }
+    );
 
     if (!res.ok) {
       throw new Error(`QuickBooks API error (${res.status}): ${await res.text()}`);
     }
 
-    const data = (await res.json());
-    return (data.QueryResponse?.Invoice ?? []).map(inv => this.normalizeQuickBooksInvoice(inv));
+    const data = (await res.json()) as any;
+    return (data.QueryResponse?.Invoice ?? []).map((inv: any) =>
+      this.normalizeQuickBooksInvoice(inv)
+    );
   }
 
-  private async fetchSingleQuickBooksInvoice(accessToken: string, realmId: string, invoiceId: string): Promise<NormalizedInvoice | null> {
-    const res = await fetch(`https://quickbooks.api.intuit.com/v3/company/${realmId}/invoice/${invoiceId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    });
+  private async fetchSingleQuickBooksInvoice(
+    accessToken: string,
+    realmId: string,
+    invoiceId: string
+  ): Promise<NormalizedInvoice | null> {
+    const res = await fetch(
+      `https://quickbooks.api.intuit.com/v3/company/${realmId}/invoice/${invoiceId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      }
+    );
 
     if (!res.ok) return null;
-    const data = (await res.json());
+    const data = (await res.json()) as any;
     return data.Invoice ? this.normalizeQuickBooksInvoice(data.Invoice) : null;
   }
 
@@ -512,7 +617,9 @@ export class SyncService {
       debtorEmail: inv.BillEmail?.Address || null,
       amountPence,
       currency: inv.CurrencyRef?.value || 'GBP',
-      dueDate: inv.DueDate ? String(inv.DueDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      dueDate: inv.DueDate
+        ? String(inv.DueDate).slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
       issuedDate: inv.TxnDate ? String(inv.TxnDate).slice(0, 10) : null,
       isPaid,
       paidDate: isPaid ? new Date().toISOString().slice(0, 10) : null,
