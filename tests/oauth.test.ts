@@ -3,6 +3,8 @@ import * as assert from 'node:assert';
 import {
   encryptToken,
   decryptToken,
+  decryptStoredToken,
+  resolveTokenEncryptionSecret,
   exchangeCodeForTokens,
   refreshProviderTokens,
   OAuthError,
@@ -21,6 +23,53 @@ void test('encrypt and decrypt token successfully', async () => {
 
   const decrypted = await decryptToken(encrypted, secretKey);
   assert.strictEqual(decrypted, plaintext);
+});
+
+void describe('resolveTokenEncryptionSecret & decryptStoredToken (shared-secret fix, 2026-09-22)', () => {
+  const portalSecret = 'portal-session-secret-key-32-chars-long-12345!';
+
+  void test('derived secret differs from the raw PORTAL_SESSION_SECRET when no dedicated secret is set', async () => {
+    const env = { PORTAL_SESSION_SECRET: portalSecret } as any;
+    const derived = await resolveTokenEncryptionSecret(env);
+    assert.notStrictEqual(derived, portalSecret);
+    // deterministic: same input always derives the same key
+    assert.strictEqual(derived, await resolveTokenEncryptionSecret(env));
+  });
+
+  void test('a dedicated TOKEN_ENCRYPTION_SECRET is returned as-is, no derivation', async () => {
+    const env = {
+      PORTAL_SESSION_SECRET: portalSecret,
+      TOKEN_ENCRYPTION_SECRET: 'dedicated-secret-32-chars-long!!',
+    } as any;
+    const secret = await resolveTokenEncryptionSecret(env);
+    assert.strictEqual(secret, 'dedicated-secret-32-chars-long!!');
+  });
+
+  void test('decryptStoredToken reads a token encrypted with the current derived key', async () => {
+    const env = { PORTAL_SESSION_SECRET: portalSecret } as any;
+    const currentSecret = await resolveTokenEncryptionSecret(env);
+    const encrypted = await encryptToken('fresh-refresh-token', currentSecret);
+    assert.strictEqual(await decryptStoredToken(encrypted, env), 'fresh-refresh-token');
+  });
+
+  void test('decryptStoredToken falls back to the raw session secret for tokens encrypted before this fix', async () => {
+    // Simulates a token stored under the old behavior, before TOKEN_ENCRYPTION_SECRET
+    // derivation shipped, when the raw PORTAL_SESSION_SECRET was used directly.
+    const env = { PORTAL_SESSION_SECRET: portalSecret } as any;
+    const legacyEncrypted = await encryptToken('legacy-refresh-token', portalSecret);
+    assert.strictEqual(await decryptStoredToken(legacyEncrypted, env), 'legacy-refresh-token');
+  });
+
+  void test('decryptStoredToken does not fall back once a dedicated TOKEN_ENCRYPTION_SECRET is configured', async () => {
+    const env = {
+      PORTAL_SESSION_SECRET: portalSecret,
+      TOKEN_ENCRYPTION_SECRET: 'dedicated-secret-32-chars-long!!',
+    } as any;
+    // Encrypted under the old raw-secret behavior, but a dedicated secret is now set —
+    // this should NOT silently succeed via the legacy fallback.
+    const legacyEncrypted = await encryptToken('legacy-refresh-token', portalSecret);
+    await assert.rejects(() => decryptStoredToken(legacyEncrypted, env));
+  });
 });
 
 void describe('OAuth Error Handling & Boundary Validation', () => {

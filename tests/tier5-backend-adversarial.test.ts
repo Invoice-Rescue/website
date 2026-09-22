@@ -17,6 +17,7 @@ import {
   verifyOAuthState,
   toBase64Url,
   fromBase64Url,
+  resolveTokenEncryptionSecret,
 } from '../backend/src/lib/integrations/oauth-manager';
 import {
   verifyQuickBooksWebhook,
@@ -631,7 +632,7 @@ describe('Tier 5 White-Box Adversarial Hardening — Backend Core Engines', () =
       const { env, db } = createTestEnv();
 
       // Seed client and accounting connection
-      const secretKey = 'portal-session-secret-key-32-chars-long-12345!';
+      const secretKey = await resolveTokenEncryptionSecret(env);
       const encAccess = await encryptToken('expired_access_token', secretKey);
       const encRefresh = await encryptToken('mock_refresh_token', secretKey);
 
@@ -659,7 +660,7 @@ describe('Tier 5 White-Box Adversarial Hardening — Backend Core Engines', () =
 
     test('3.6 Token Refresh Race Condition Leads to Connection Revocation', async () => {
       const { env, db } = createTestEnv();
-      const secretKey = 'portal-session-secret-key-32-chars-long-12345!';
+      const secretKey = await resolveTokenEncryptionSecret(env);
       const encAccess = await encryptToken('access_token_old', secretKey);
       const encRefresh = await encryptToken('refresh_token_raced', secretKey);
 

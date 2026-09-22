@@ -86,7 +86,8 @@ import {
   refreshProviderTokens,
   revokeProviderToken,
   encryptToken,
-  decryptToken,
+  decryptStoredToken,
+  resolveTokenEncryptionSecret,
   type TokenExchangeResult,
 } from './lib/integrations/oauth-manager';
 import { verifyXeroWebhook, verifyQuickBooksWebhook } from './lib/integrations/webhooks';
@@ -966,7 +967,7 @@ async function handleOAuthConnect(
   }
 
   const returnTo = url.searchParams.get('return_to') || '/portal/dashboard';
-  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const encryptionSecret = await resolveTokenEncryptionSecret(env);
   const state = await generateOAuthState(
     { cid: clientId, p: provider, ret: returnTo },
     encryptionSecret,
@@ -1016,7 +1017,7 @@ async function handleOAuthCallback(
     );
   }
 
-  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const encryptionSecret = await resolveTokenEncryptionSecret(env);
   const statePayload = await verifyOAuthState(state, encryptionSecret, provider);
   if (!statePayload) {
     return Response.json(
@@ -1131,7 +1132,7 @@ async function handleOAuthRefresh(
     );
   }
 
-  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const encryptionSecret = await resolveTokenEncryptionSecret(env);
   const clientCreds =
     provider === 'xero'
       ? {
@@ -1144,7 +1145,7 @@ async function handleOAuthRefresh(
         };
 
   try {
-    const refreshToken = await decryptToken(conn.refresh_token_encrypted, encryptionSecret);
+    const refreshToken = await decryptStoredToken(conn.refresh_token_encrypted, env);
     const refreshed = await refreshProviderTokens(provider, refreshToken, clientCreds);
     const newAccessEncrypted = await encryptToken(refreshed.accessToken, encryptionSecret);
     const newRefreshEncrypted = await encryptToken(refreshed.refreshToken, encryptionSecret);
@@ -1221,7 +1222,7 @@ async function handleOAuthDisconnect(
     );
   }
 
-  const encryptionSecret = (env as any).TOKEN_ENCRYPTION_SECRET || env.PORTAL_SESSION_SECRET;
+  const encryptionSecret = await resolveTokenEncryptionSecret(env);
   const clientCreds =
     provider === 'xero'
       ? {
@@ -1234,7 +1235,7 @@ async function handleOAuthDisconnect(
         };
 
   try {
-    const refreshToken = await decryptToken(conn.refresh_token_encrypted, encryptionSecret);
+    const refreshToken = await decryptStoredToken(conn.refresh_token_encrypted, env);
     await revokeProviderToken(provider, refreshToken, clientCreds);
   } catch (err) {
     console.warn(`External token revocation failed for provider ${provider}:`, err);

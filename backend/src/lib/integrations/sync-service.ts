@@ -6,9 +6,10 @@
  */
 
 import {
-  decryptToken,
+  decryptStoredToken,
   encryptToken,
   refreshProviderTokens,
+  resolveTokenEncryptionSecret,
   revokeProviderToken,
 } from './oauth-manager';
 import { validateClientId } from '../tenant-repo';
@@ -56,12 +57,8 @@ export class SyncService {
     private readonly env: Env
   ) {}
 
-  private getEncryptionSecret(): string {
-    const secret = (this.env as any).TOKEN_ENCRYPTION_SECRET || this.env.PORTAL_SESSION_SECRET;
-    if (!secret) {
-      throw new Error('TOKEN_ENCRYPTION_SECRET configuration error: secret is missing.');
-    }
-    return secret;
+  private getEncryptionSecret(): Promise<string> {
+    return resolveTokenEncryptionSecret(this.env);
   }
 
   /**
@@ -93,7 +90,7 @@ export class SyncService {
       };
     }
 
-    const secretKey = this.getEncryptionSecret();
+    const secretKey = await this.getEncryptionSecret();
     const accessToken = await this.resolveFreshAccessToken(conn, secretKey);
     if (!accessToken) {
       return {
@@ -186,7 +183,7 @@ export class SyncService {
 
     if (!conn) return false;
 
-    const secretKey = this.getEncryptionSecret();
+    const secretKey = await this.getEncryptionSecret();
     const accessToken = await this.resolveFreshAccessToken(conn, secretKey);
     if (!accessToken) return false;
 
@@ -229,7 +226,7 @@ export class SyncService {
 
     if (!conn) return false;
 
-    const secretKey = this.getEncryptionSecret();
+    const secretKey = await this.getEncryptionSecret();
     const creds =
       provider === 'xero'
         ? {
@@ -242,7 +239,7 @@ export class SyncService {
           };
 
     try {
-      const refreshToken = await decryptToken(conn.refresh_token_encrypted, secretKey);
+      const refreshToken = await decryptStoredToken(conn.refresh_token_encrypted, this.env);
       await revokeProviderToken(provider, refreshToken, creds);
     } catch (err) {
       console.warn(`External token revocation encountered an error for provider ${provider}:`, err);
@@ -429,7 +426,7 @@ export class SyncService {
 
     if (isExpiringSoon) {
       try {
-        const decryptedRefresh = await decryptToken(conn.refresh_token_encrypted, secretKey);
+        const decryptedRefresh = await decryptStoredToken(conn.refresh_token_encrypted, this.env);
         const creds =
           conn.provider === 'xero'
             ? {
@@ -475,14 +472,14 @@ export class SyncService {
         );
         // Fall back to existing decrypted token if network error
         try {
-          return await decryptToken(conn.access_token_encrypted, secretKey);
+          return await decryptStoredToken(conn.access_token_encrypted, this.env);
         } catch {
           return null;
         }
       }
     }
 
-    return await decryptToken(conn.access_token_encrypted, secretKey);
+    return await decryptStoredToken(conn.access_token_encrypted, this.env);
   }
 
   private async fetchXeroInvoices(

@@ -192,6 +192,40 @@ export function fromBase64Url(s: string): Uint8Array | null {
 }
 
 /**
+ * Resolves the key material for OAuth token encryption. Uses a dedicated
+ * TOKEN_ENCRYPTION_SECRET when configured; otherwise derives a key from
+ * PORTAL_SESSION_SECRET via HMAC-SHA256 with a fixed domain-separation
+ * label, so the bytes used to encrypt tokens differ from the bytes used to
+ * sign portal session tokens even when only one secret is provisioned.
+ */
+export async function resolveTokenEncryptionSecret(env: Env): Promise<string> {
+  const dedicated = (env as any).TOKEN_ENCRYPTION_SECRET;
+  if (dedicated) return dedicated;
+
+  const portalSecret = env.PORTAL_SESSION_SECRET;
+  if (!portalSecret) {
+    throw new Error('TOKEN_ENCRYPTION_SECRET configuration error: secret is missing.');
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(portalSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    encoder.encode('invoice-rescue:token-encryption-v1')
+  );
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
  * Encrypts a token using AES-GCM (256-bit) with a random 12-byte IV.
  */
 export async function encryptToken(plaintext: string, secretKey: string): Promise<string> {
@@ -241,6 +275,26 @@ export async function decryptToken(ciphertextWithIv: string, secretKey: string):
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
 
   return decoder.decode(decrypted);
+}
+
+/**
+ * Decrypts a stored OAuth token, tolerating tokens encrypted before the
+ * TOKEN_ENCRYPTION_SECRET key-derivation fix shipped: those were encrypted
+ * directly with the raw PORTAL_SESSION_SECRET. Tries the current key first
+ * (dedicated TOKEN_ENCRYPTION_SECRET, or the HMAC-derived fallback); if that
+ * fails AND no dedicated secret is configured, retries with the raw session
+ * secret so already-connected clients aren't silently logged out of
+ * Xero/QuickBooks on the next sync. Only reads need this — new tokens are
+ * always written with the current key via encryptToken + resolveTokenEncryptionSecret.
+ */
+export async function decryptStoredToken(ciphertextWithIv: string, env: Env): Promise<string> {
+  const currentSecret = await resolveTokenEncryptionSecret(env);
+  try {
+    return await decryptToken(ciphertextWithIv, currentSecret);
+  } catch (err) {
+    if ((env as any).TOKEN_ENCRYPTION_SECRET) throw err;
+    return decryptToken(ciphertextWithIv, env.PORTAL_SESSION_SECRET);
+  }
 }
 
 /**

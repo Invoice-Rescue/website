@@ -8,11 +8,9 @@ import {
   verifyOAuthState,
   encryptToken,
   decryptToken,
+  resolveTokenEncryptionSecret,
 } from '../backend/src/lib/integrations/oauth-manager';
-import {
-  recordAccountingWebhook,
-  InvalidWebhookEventError,
-} from '../backend/src/lib/tenant-repo';
+import { recordAccountingWebhook, InvalidWebhookEventError } from '../backend/src/lib/tenant-repo';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
 
 describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
@@ -81,7 +79,7 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
 
       const res = await worker.fetch(req, env);
       assert.strictEqual(res.status, 200);
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       assert.strictEqual(json.ok, true);
     });
 
@@ -89,7 +87,8 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const { env } = createTestEnv({ XERO_WEBHOOK_KEY: xeroSecret } as any);
       const validSig = await signHmacSha256(sampleXeroPayload, xeroSecret);
       // Flip a character in the base64 signature
-      const tamperedSig = validSig.slice(0, -2) + (validSig.endsWith('A') ? 'B' : 'A') + validSig.slice(-1);
+      const tamperedSig =
+        validSig.slice(0, -2) + (validSig.endsWith('A') ? 'B' : 'A') + validSig.slice(-1);
 
       const req = new Request('http://localhost/api/webhooks/xero', {
         method: 'POST',
@@ -192,7 +191,11 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
         body: emptyBody,
       });
       const badRes = await worker.fetch(badReq, env);
-      assert.strictEqual(badRes.status, 401, 'Xero ITR probe with invalid signature must return 401');
+      assert.strictEqual(
+        badRes.status,
+        401,
+        'Xero ITR probe with invalid signature must return 401'
+      );
 
       // Valid signature on ITR probe -> MUST return 200
       const validSig = await signHmacSha256(emptyBody, xeroSecret);
@@ -205,7 +208,11 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
         body: emptyBody,
       });
       const goodRes = await worker.fetch(goodReq, env);
-      assert.strictEqual(goodRes.status, 200, 'Xero ITR probe with valid signature must return 200');
+      assert.strictEqual(
+        goodRes.status,
+        200,
+        'Xero ITR probe with valid signature must return 200'
+      );
     });
 
     test('QuickBooks: Valid signature returns 200, tampered signature returns 401', async () => {
@@ -277,7 +284,10 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const [pB64, sigB64] = validState.split('.');
       const pDecoded = JSON.parse(atob(pB64.replace(/-/g, '+').replace(/_/g, '/')));
       pDecoded.cid = 1;
-      const tamperedPB64 = btoa(JSON.stringify(pDecoded)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const tamperedPB64 = btoa(JSON.stringify(pDecoded))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
       const tamperedState = `${tamperedPB64}.${sigB64}`;
 
       const resTampered = await verifyOAuthState(tamperedState, stateSecret, 'xero');
@@ -318,40 +328,52 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       `);
 
       const encToken = await encryptToken('mock-xero-access', 'secret-key-32-chars-long-test-123!');
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
         VALUES (10, 'xero', 'tenant-dedup-xero', ?1, ?1, '2026-09-17T00:00:00Z', 'active')
-      `).bind(encToken).run();
+      `
+        )
+        .bind(encToken)
+        .run();
 
       let syncSingleInvoiceCalls = 0;
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
         const url = input.toString();
         if (url.includes('/api.xro/2.0/Invoices/')) {
           syncSingleInvoiceCalls++;
-          return new Response(JSON.stringify({
-            Invoices: [{
-              InvoiceID: 'inv-dedup-1',
-              InvoiceNumber: 'INV-DEDUP-001',
-              Contact: { Name: 'Dedup Debtor' },
-              AmountDue: 250.0,
-              Total: 250.0,
-              Status: 'AUTHORISED',
-              DueDateString: '2026-08-10',
-            }]
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              Invoices: [
+                {
+                  InvoiceID: 'inv-dedup-1',
+                  InvoiceNumber: 'INV-DEDUP-001',
+                  Contact: { Name: 'Dedup Debtor' },
+                  AmountDue: 250.0,
+                  Total: 250.0,
+                  Status: 'AUTHORISED',
+                  DueDateString: '2026-08-10',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
         return new Response('Not Found', { status: 404 });
       };
 
       const payload = JSON.stringify({
-        events: [{
-          resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/inv-dedup-1',
-          resourceId: 'inv-dedup-1',
-          eventDateUtc: '2026-09-16T05:00:00.000Z',
-          eventType: 'UPDATE',
-          eventCategory: 'INVOICE',
-          tenantId: 'tenant-dedup-xero',
-        }],
+        events: [
+          {
+            resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/inv-dedup-1',
+            resourceId: 'inv-dedup-1',
+            eventDateUtc: '2026-09-16T05:00:00.000Z',
+            eventType: 'UPDATE',
+            eventCategory: 'INVOICE',
+            tenantId: 'tenant-dedup-xero',
+          },
+        ],
         firstEventSequence: 1,
         lastEventSequence: 1,
       });
@@ -373,18 +395,26 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       }
 
       // Check accounting_webhook_events has exactly 1 entry
-      const countRow = await db.prepare(
-        "SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'xero'"
-      ).first<{ count: number }>();
-      assert.strictEqual(countRow?.count, 1, 'Exactly 1 event must be recorded in accounting_webhook_events');
+      const countRow = await db
+        .prepare("SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'xero'")
+        .first<{ count: number }>();
+      assert.strictEqual(
+        countRow?.count,
+        1,
+        'Exactly 1 event must be recorded in accounting_webhook_events'
+      );
 
       // Check external provider sync was called exactly ONCE
-      assert.strictEqual(syncSingleInvoiceCalls, 1, 'Sync API must be called exactly once despite 50 replays');
+      assert.strictEqual(
+        syncSingleInvoiceCalls,
+        1,
+        'Sync API must be called exactly once despite 50 replays'
+      );
 
       // Check invoice table has exactly 1 invoice
-      const invoiceCount = await db.prepare(
-        'SELECT COUNT(*) as count FROM invoices WHERE client_id = 10'
-      ).first<{ count: number }>();
+      const invoiceCount = await db
+        .prepare('SELECT COUNT(*) as count FROM invoices WHERE client_id = 10')
+        .first<{ count: number }>();
       assert.strictEqual(invoiceCount?.count, 1);
     });
 
@@ -400,42 +430,54 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       `);
 
       const encToken = await encryptToken('mock-qb-access', 'secret-key-32-chars-long-test-123!');
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
         VALUES (20, 'quickbooks', 'realm-dedup-qb', ?1, ?1, '2026-09-17T00:00:00Z', 'active')
-      `).bind(encToken).run();
+      `
+        )
+        .bind(encToken)
+        .run();
 
       let qbFetchCalls = 0;
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
         const url = input.toString();
         if (url.includes('/company/realm-dedup-qb/invoice/')) {
           qbFetchCalls++;
-          return new Response(JSON.stringify({
-            Invoice: {
-              Id: 'qb-inv-999',
-              DocNumber: 'INV-QB-999',
-              CustomerRef: { name: 'QB Debtor' },
-              Balance: 500.0,
-              TotalAmt: 500.0,
-              DueDate: '2026-08-15',
-            }
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              Invoice: {
+                Id: 'qb-inv-999',
+                DocNumber: 'INV-QB-999',
+                CustomerRef: { name: 'QB Debtor' },
+                Balance: 500.0,
+                TotalAmt: 500.0,
+                DueDate: '2026-08-15',
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
         return new Response('Not Found', { status: 404 });
       };
 
       const payload = JSON.stringify({
-        eventNotifications: [{
-          realmId: 'realm-dedup-qb',
-          dataChangeEvent: {
-            entities: [{
-              name: 'Invoice',
-              id: 'qb-inv-999',
-              operation: 'Update',
-              lastUpdated: '2026-09-16T05:15:00.000Z',
-            }],
+        eventNotifications: [
+          {
+            realmId: 'realm-dedup-qb',
+            dataChangeEvent: {
+              entities: [
+                {
+                  name: 'Invoice',
+                  id: 'qb-inv-999',
+                  operation: 'Update',
+                  lastUpdated: '2026-09-16T05:15:00.000Z',
+                },
+              ],
+            },
           },
-        }],
+        ],
       });
 
       const signature = await signHmacSha256(payload, qbSecret);
@@ -453,11 +495,17 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
         assert.strictEqual(res.status, 200);
       }
 
-      const countRow = await db.prepare(
-        "SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'quickbooks'"
-      ).first<{ count: number }>();
+      const countRow = await db
+        .prepare(
+          "SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'quickbooks'"
+        )
+        .first<{ count: number }>();
       assert.strictEqual(countRow?.count, 1);
-      assert.strictEqual(qbFetchCalls, 1, 'QuickBooks fetch must only occur once across 50 replays');
+      assert.strictEqual(
+        qbFetchCalls,
+        1,
+        'QuickBooks fetch must only occur once across 50 replays'
+      );
     });
 
     test('Direct recordAccountingWebhook: Replay with different payload rejects duplicate ID', async () => {
@@ -472,13 +520,16 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(second, false);
 
       // Replay with maliciously altered payload
-      const third = await recordAccountingWebhook(env.DB, 'evt_unique_1', 'xero', { amount: 999999 });
+      const third = await recordAccountingWebhook(env.DB, 'evt_unique_1', 'xero', {
+        amount: 999999,
+      });
       assert.strictEqual(third, false);
 
       // Verify original payload remains intact in DB
-      const row = await db.prepare(
-        'SELECT payload FROM accounting_webhook_events WHERE id = ?1'
-      ).bind('evt_unique_1').first<{ payload: string }>();
+      const row = await db
+        .prepare('SELECT payload FROM accounting_webhook_events WHERE id = ?1')
+        .bind('evt_unique_1')
+        .first<{ payload: string }>();
       assert.ok(row);
       assert.strictEqual(JSON.parse(row.payload).amount, 100);
     });
@@ -549,14 +600,16 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(outcome, 'marked_paid');
 
       // Verify invoice status
-      const inv = await db.prepare('SELECT status, paid_date FROM invoices WHERE id = 50').first<any>();
+      const inv = await db
+        .prepare('SELECT status, paid_date FROM invoices WHERE id = 50')
+        .first<any>();
       assert.strictEqual(inv.status, 'paid');
       assert.strictEqual(inv.paid_date, '2026-09-16');
 
       // Verify drafts 501, 502, 503 are all transitioned to 'skipped' with reviewed_at
-      const drafts = await db.prepare(
-        'SELECT id, status, reviewed_at FROM chase_log WHERE id IN (501, 502, 503)'
-      ).all<any>();
+      const drafts = await db
+        .prepare('SELECT id, status, reviewed_at FROM chase_log WHERE id IN (501, 502, 503)')
+        .all<any>();
 
       assert.strictEqual(drafts.results.length, 3);
       for (const d of drafts.results) {
@@ -565,11 +618,19 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       }
 
       // CRITICAL: Previously skipped and sent drafts must NOT be overwritten
-      const skippedChase = await db.prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 504').first<any>();
+      const skippedChase = await db
+        .prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 504')
+        .first<any>();
       assert.strictEqual(skippedChase.status, 'skipped');
-      assert.strictEqual(skippedChase.reviewed_at, '2026-09-10T10:00:00Z', 'Previously skipped draft reviewed_at must not be overwritten');
+      assert.strictEqual(
+        skippedChase.reviewed_at,
+        '2026-09-10T10:00:00Z',
+        'Previously skipped draft reviewed_at must not be overwritten'
+      );
 
-      const sentChase = await db.prepare('SELECT status, outcome FROM chase_log WHERE id = 505').first<any>();
+      const sentChase = await db
+        .prepare('SELECT status, outcome FROM chase_log WHERE id = 505')
+        .first<any>();
       assert.strictEqual(sentChase.status, 'sent', 'Already sent chase must not be overwritten');
       assert.strictEqual(sentChase.outcome, 'sent');
     });
@@ -593,40 +654,52 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       `);
 
       const encToken = await encryptToken('mock-xero-access', 'secret-key-32-chars-long-test-123!');
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
         VALUES (6, 'xero', 'tenant-xero-wh-6', ?1, ?1, '2026-09-17T00:00:00Z', 'active')
-      `).bind(encToken).run();
+      `
+        )
+        .bind(encToken)
+        .run();
 
       // Mock Xero single invoice fetch returning PAID
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
         const url = input.toString();
         if (url.includes('/api.xro/2.0/Invoices/xero-res-60')) {
-          return new Response(JSON.stringify({
-            Invoices: [{
-              InvoiceID: 'xero-res-60',
-              InvoiceNumber: 'INV-WH-60',
-              Contact: { Name: 'Debtor WH' },
-              AmountDue: 0.0,
-              Total: 1200.0,
-              Status: 'PAID',
-              DueDateString: '2026-08-01',
-              FullyPaidOnDate: '2026-09-16',
-            }]
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              Invoices: [
+                {
+                  InvoiceID: 'xero-res-60',
+                  InvoiceNumber: 'INV-WH-60',
+                  Contact: { Name: 'Debtor WH' },
+                  AmountDue: 0.0,
+                  Total: 1200.0,
+                  Status: 'PAID',
+                  DueDateString: '2026-08-01',
+                  FullyPaidOnDate: '2026-09-16',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
         return new Response('Not Found', { status: 404 });
       };
 
       const payload = JSON.stringify({
-        events: [{
-          resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/xero-res-60',
-          resourceId: 'xero-res-60',
-          eventDateUtc: '2026-09-16T05:40:00.000Z',
-          eventType: 'UPDATE',
-          eventCategory: 'INVOICE',
-          tenantId: 'tenant-xero-wh-6',
-        }],
+        events: [
+          {
+            resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/xero-res-60',
+            resourceId: 'xero-res-60',
+            eventDateUtc: '2026-09-16T05:40:00.000Z',
+            eventType: 'UPDATE',
+            eventCategory: 'INVOICE',
+            tenantId: 'tenant-xero-wh-6',
+          },
+        ],
         firstEventSequence: 1,
         lastEventSequence: 1,
       });
@@ -646,12 +719,16 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(res.status, 200);
 
       // Verify draft 601 was cancelled to 'skipped'
-      const draft = await db.prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 601').first<any>();
+      const draft = await db
+        .prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 601')
+        .first<any>();
       assert.strictEqual(draft.status, 'skipped');
       assert.ok(draft.reviewed_at);
 
       // Verify invoice marked paid
-      const invoice = await db.prepare('SELECT status, paid_date FROM invoices WHERE id = 60').first<any>();
+      const invoice = await db
+        .prepare('SELECT status, paid_date FROM invoices WHERE id = 60')
+        .first<any>();
       assert.strictEqual(invoice.status, 'paid');
       assert.strictEqual(invoice.paid_date, '2026-09-16');
     });
@@ -688,7 +765,9 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(outcome, 'unchanged');
 
       // Verify invoice status remains 'paid' and paid_date is unchanged
-      const inv = await db.prepare('SELECT status, paid_date FROM invoices WHERE id = 70').first<any>();
+      const inv = await db
+        .prepare('SELECT status, paid_date FROM invoices WHERE id = 70')
+        .first<any>();
       assert.strictEqual(inv.status, 'paid');
       assert.strictEqual(inv.paid_date, '2026-09-10');
     });
@@ -729,7 +808,9 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const inv = await db.prepare('SELECT status FROM invoices WHERE id = 80').first<any>();
       assert.strictEqual(inv.status, 'disputed');
 
-      const draft = await db.prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 801').first<any>();
+      const draft = await db
+        .prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 801')
+        .first<any>();
       assert.strictEqual(draft.status, 'skipped');
       assert.ok(draft.reviewed_at);
     });
@@ -758,17 +839,25 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       // Expired 1 hour ago
       const expiredTimestamp = new Date(Date.now() - 3600 * 1000).toISOString();
 
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (
           client_id, provider, tenant_id, access_token_encrypted,
           refresh_token_encrypted, expires_at, status
         ) VALUES (11, 'xero', 'tenant-refresh-11', ?1, ?2, ?3, 'active')
-      `).bind(encOldAccess, encOldRefresh, expiredTimestamp).run();
+      `
+        )
+        .bind(encOldAccess, encOldRefresh, expiredTimestamp)
+        .run();
 
       let refreshEndpointCalled = false;
       let syncFetchCalled = false;
 
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      globalThis.fetch = async (
+        input: RequestInfo | URL,
+        init?: RequestInit
+      ): Promise<Response> => {
         const url = input.toString();
 
         if (url === 'https://identity.xero.com/connect/token') {
@@ -777,17 +866,21 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
           assert.ok(body.includes('grant_type=refresh_token'));
           assert.ok(body.includes('refresh_token=old-refresh-token-11'));
 
-          return new Response(JSON.stringify({
-            access_token: 'freshly-refreshed-access-token-11',
-            refresh_token: 'freshly-refreshed-refresh-token-11',
-            expires_in: 3600,
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              access_token: 'freshly-refreshed-access-token-11',
+              refresh_token: 'freshly-refreshed-refresh-token-11',
+              expires_in: 3600,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
 
         if (url.includes('/api.xro/2.0/Invoices')) {
           syncFetchCalled = true;
           // Verify that invoices fetch uses the NEW access token!
-          const authHeader = (init?.headers as any)?.Authorization || (init?.headers as any)?.authorization;
+          const authHeader =
+            (init?.headers as any)?.Authorization || (init?.headers as any)?.authorization;
           assert.strictEqual(authHeader, 'Bearer freshly-refreshed-access-token-11');
 
           return new Response(JSON.stringify({ Invoices: [] }), {
@@ -803,13 +896,23 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const syncResult = await syncService.syncInvoices(11);
 
       assert.strictEqual(syncResult.success, true);
-      assert.strictEqual(refreshEndpointCalled, true, 'refreshProviderTokens must be invoked for expired token');
-      assert.strictEqual(syncFetchCalled, true, 'Sync must continue using newly refreshed access token');
+      assert.strictEqual(
+        refreshEndpointCalled,
+        true,
+        'refreshProviderTokens must be invoked for expired token'
+      );
+      assert.strictEqual(
+        syncFetchCalled,
+        true,
+        'Sync must continue using newly refreshed access token'
+      );
 
       // Verify connection in D1 was updated with new encrypted tokens and future expiration
-      const updatedConn = await db.prepare(
-        'SELECT access_token_encrypted, refresh_token_encrypted, expires_at, status FROM accounting_connections WHERE client_id = 11'
-      ).first<any>();
+      const updatedConn = await db
+        .prepare(
+          'SELECT access_token_encrypted, refresh_token_encrypted, expires_at, status FROM accounting_connections WHERE client_id = 11'
+        )
+        .first<any>();
 
       assert.ok(updatedConn);
       assert.strictEqual(updatedConn.status, 'active');
@@ -821,7 +924,10 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(decryptedRefresh, 'freshly-refreshed-refresh-token-11');
 
       const newExpiresMs = new Date(updatedConn.expires_at).getTime();
-      assert.ok(newExpiresMs > Date.now() + 3000 * 1000, 'New expires_at must be ~1 hour in the future');
+      assert.ok(
+        newExpiresMs > Date.now() + 3000 * 1000,
+        'New expires_at must be ~1 hour in the future'
+      );
     });
 
     test('SyncService automatically refreshes token when expiring within 5-minute safety threshold', async () => {
@@ -843,24 +949,35 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       // Expiring in 2 minutes (within the 5-minute window)
       const nearExpiryTimestamp = new Date(Date.now() + 120 * 1000).toISOString();
 
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (
           client_id, provider, tenant_id, access_token_encrypted,
           refresh_token_encrypted, expires_at, status
         ) VALUES (12, 'quickbooks', 'realm-12', ?1, ?2, ?3, 'active')
-      `).bind(encOldAccess, encOldRefresh, nearExpiryTimestamp).run();
+      `
+        )
+        .bind(encOldAccess, encOldRefresh, nearExpiryTimestamp)
+        .run();
 
       let qbRefreshCalled = false;
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      globalThis.fetch = async (
+        input: RequestInfo | URL,
+        init?: RequestInit
+      ): Promise<Response> => {
         const url = input.toString();
 
         if (url === 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer') {
           qbRefreshCalled = true;
-          return new Response(JSON.stringify({
-            access_token: 'fresh-qb-access-token-12',
-            refresh_token: 'fresh-qb-refresh-token-12',
-            expires_in: 3600,
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              access_token: 'fresh-qb-access-token-12',
+              refresh_token: 'fresh-qb-refresh-token-12',
+              expires_in: 3600,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
 
         if (url.includes('/query')) {
@@ -877,7 +994,11 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const result = await syncService.syncInvoices(12);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(qbRefreshCalled, true, 'Token expiring in 2 min must trigger automatic refresh');
+      assert.strictEqual(
+        qbRefreshCalled,
+        true,
+        'Token expiring in 2 min must trigger automatic refresh'
+      );
     });
 
     test('SyncService DOES NOT refresh token when token is comfortably fresh (> 5 min)', async () => {
@@ -897,12 +1018,17 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       // Expiring in 2 hours
       const freshTimestamp = new Date(Date.now() + 7200 * 1000).toISOString();
 
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (
           client_id, provider, tenant_id, access_token_encrypted,
           refresh_token_encrypted, expires_at, status
         ) VALUES (13, 'xero', 'tenant-fresh-13', ?1, ?2, ?3, 'active')
-      `).bind(encAccess, encRefresh, freshTimestamp).run();
+      `
+        )
+        .bind(encAccess, encRefresh, freshTimestamp)
+        .run();
 
       let refreshEndpointCalled = false;
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
@@ -924,7 +1050,11 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const result = await syncService.syncInvoices(13);
 
       assert.strictEqual(result.success, true);
-      assert.strictEqual(refreshEndpointCalled, false, 'Fresh token (> 5 min) must NOT trigger refresh');
+      assert.strictEqual(
+        refreshEndpointCalled,
+        false,
+        'Fresh token (> 5 min) must NOT trigger refresh'
+      );
     });
 
     test('SyncService handles invalid_grant on refresh by transitioning connection status to revoked', async () => {
@@ -944,20 +1074,28 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const encRefresh = await encryptToken('revoked-refresh-14', secret);
       const expiredTimestamp = new Date(Date.now() - 3600 * 1000).toISOString();
 
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (
           client_id, provider, tenant_id, access_token_encrypted,
           refresh_token_encrypted, expires_at, status
         ) VALUES (14, 'xero', 'tenant-14', ?1, ?2, ?3, 'active')
-      `).bind(encAccess, encRefresh, expiredTimestamp).run();
+      `
+        )
+        .bind(encAccess, encRefresh, expiredTimestamp)
+        .run();
 
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
         const url = input.toString();
         if (url === 'https://identity.xero.com/connect/token') {
-          return new Response(JSON.stringify({
-            error: 'invalid_grant',
-            error_description: 'Token has been revoked or expired',
-          }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              error: 'invalid_grant',
+              error_description: 'Token has been revoked or expired',
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
         }
         return new Response('Not Found', { status: 404 });
       };
@@ -967,13 +1105,19 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
 
       // Must fail cleanly
       assert.strictEqual(result.success, false);
-      assert.ok(result.reason?.includes('revoked') || result.reason?.includes('fresh access token'));
+      assert.ok(
+        result.reason?.includes('revoked') || result.reason?.includes('fresh access token')
+      );
 
       // Connection status in D1 must be updated to 'revoked'
-      const conn = await db.prepare(
-        'SELECT status FROM accounting_connections WHERE client_id = 14'
-      ).first<any>();
-      assert.strictEqual(conn.status, 'revoked', 'Connection status must transition to revoked on invalid_grant');
+      const conn = await db
+        .prepare('SELECT status FROM accounting_connections WHERE client_id = 14')
+        .first<any>();
+      assert.strictEqual(
+        conn.status,
+        'revoked',
+        'Connection status must transition to revoked on invalid_grant'
+      );
     });
 
     test('POST /api/oauth/:provider/refresh endpoint updates connection and handles revoked grants', async () => {
@@ -989,15 +1133,21 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
         VALUES (15, 'Manual Refresh Client', 'mrc@test.com', 'engine', 'active');
       `);
 
-      const encAccess = await encryptToken('access-15', secret);
-      const encRefresh = await encryptToken('refresh-15', secret);
+      const tokenSecret = await resolveTokenEncryptionSecret(env);
+      const encAccess = await encryptToken('access-15', tokenSecret);
+      const encRefresh = await encryptToken('refresh-15', tokenSecret);
 
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (
           client_id, provider, tenant_id, access_token_encrypted,
           refresh_token_encrypted, expires_at, status
         ) VALUES (15, 'xero', 'tenant-15', ?1, ?2, '2026-09-16T00:00:00Z', 'active')
-      `).bind(encAccess, encRefresh).run();
+      `
+        )
+        .bind(encAccess, encRefresh)
+        .run();
 
       const sessionCookie = await buildSessionCookie(15, secret);
 
@@ -1019,7 +1169,9 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const res = await worker.fetch(req, env);
       assert.strictEqual(res.status, 401, 'Endpoint must return 401 when refresh token is revoked');
 
-      const conn = await db.prepare('SELECT status FROM accounting_connections WHERE client_id = 15').first<any>();
+      const conn = await db
+        .prepare('SELECT status FROM accounting_connections WHERE client_id = 15')
+        .first<any>();
       assert.strictEqual(conn.status, 'revoked');
     });
   });
@@ -1060,7 +1212,8 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       );
 
       // Tampered ciphertext (flip 1 character)
-      const tampered = encrypted.slice(0, 15) + (encrypted[15] === 'A' ? 'B' : 'A') + encrypted.slice(16);
+      const tampered =
+        encrypted.slice(0, 15) + (encrypted[15] === 'A' ? 'B' : 'A') + encrypted.slice(16);
       await assert.rejects(
         async () => decryptToken(tampered, keyA),
         'Decrypting tampered ciphertext must fail closed'
@@ -1080,40 +1233,52 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       `);
 
       const encToken = await encryptToken('mock-xero-access', 'test-secret-at-least-32-chars!');
-      await db.prepare(`
+      await db
+        .prepare(
+          `
         INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
         VALUES (30, 'xero', 'tenant-parallel', ?1, ?1, '2026-09-17T00:00:00Z', 'active')
-      `).bind(encToken).run();
+      `
+        )
+        .bind(encToken)
+        .run();
 
       let parallelSyncCalls = 0;
       globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
         const url = input.toString();
         if (url.includes('/api.xro/2.0/Invoices/')) {
           parallelSyncCalls++;
-          return new Response(JSON.stringify({
-            Invoices: [{
-              InvoiceID: 'inv-parallel-1',
-              InvoiceNumber: 'INV-PARALLEL-1',
-              Contact: { Name: 'Parallel Debtor' },
-              AmountDue: 1000.0,
-              Total: 1000.0,
-              Status: 'AUTHORISED',
-              DueDateString: '2026-08-20',
-            }]
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          return new Response(
+            JSON.stringify({
+              Invoices: [
+                {
+                  InvoiceID: 'inv-parallel-1',
+                  InvoiceNumber: 'INV-PARALLEL-1',
+                  Contact: { Name: 'Parallel Debtor' },
+                  AmountDue: 1000.0,
+                  Total: 1000.0,
+                  Status: 'AUTHORISED',
+                  DueDateString: '2026-08-20',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
         }
         return new Response('Not Found', { status: 404 });
       };
 
       const payload = JSON.stringify({
-        events: [{
-          resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/inv-parallel-1',
-          resourceId: 'inv-parallel-1',
-          eventDateUtc: '2026-09-16T05:50:00.000Z',
-          eventType: 'UPDATE',
-          eventCategory: 'INVOICE',
-          tenantId: 'tenant-parallel',
-        }],
+        events: [
+          {
+            resourceUrl: 'https://api.xero.com/api.xro/2.0/Invoices/inv-parallel-1',
+            resourceId: 'inv-parallel-1',
+            eventDateUtc: '2026-09-16T05:50:00.000Z',
+            eventType: 'UPDATE',
+            eventCategory: 'INVOICE',
+            tenantId: 'tenant-parallel',
+          },
+        ],
         firstEventSequence: 1,
         lastEventSequence: 1,
       });
@@ -1139,13 +1304,19 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       }
 
       // DB must contain exactly 1 event
-      const eventRows = await db.prepare(
-        "SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'xero' AND id LIKE '%inv-parallel-1%'"
-      ).first<{ count: number }>();
+      const eventRows = await db
+        .prepare(
+          "SELECT COUNT(*) as count FROM accounting_webhook_events WHERE provider = 'xero' AND id LIKE '%inv-parallel-1%'"
+        )
+        .first<{ count: number }>();
       assert.strictEqual(eventRows?.count, 1);
 
       // Sync must only have been invoked once
-      assert.strictEqual(parallelSyncCalls, 1, 'Sync API must be called exactly once despite 20 concurrent requests');
+      assert.strictEqual(
+        parallelSyncCalls,
+        1,
+        'Sync API must be called exactly once despite 20 concurrent requests'
+      );
     });
 
     test('Cross-Tenant Sync Isolation: Concurrent sync with identical invoice numbers across tenants', async () => {
@@ -1187,12 +1358,16 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(outcome, 'updated');
 
       // Tenant 200 invoice must be updated
-      const inv200 = await db.prepare('SELECT amount_pence, status FROM invoices WHERE id = 2001').first<any>();
+      const inv200 = await db
+        .prepare('SELECT amount_pence, status FROM invoices WHERE id = 2001')
+        .first<any>();
       assert.strictEqual(inv200.amount_pence, 55000);
       assert.strictEqual(inv200.status, 'overdue');
 
       // CRITICAL: Tenant 100 invoice must NOT be modified in any way!
-      const inv100 = await db.prepare('SELECT amount_pence, status, paid_date FROM invoices WHERE id = 1001').first<any>();
+      const inv100 = await db
+        .prepare('SELECT amount_pence, status, paid_date FROM invoices WHERE id = 1001')
+        .first<any>();
       assert.strictEqual(inv100.amount_pence, 100000, 'Tenant 100 amount must remain unchanged');
       assert.strictEqual(inv100.status, 'paid', 'Tenant 100 status must remain paid');
       assert.strictEqual(inv100.paid_date, '2026-09-01');
@@ -1207,7 +1382,7 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const res = await worker.fetch(req, env);
       assert.strictEqual(res.status, 400);
 
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       assert.strictEqual(json.ok, false);
       assert.ok(json.error.includes('The user cancelled the request'));
     });
@@ -1219,7 +1394,7 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       const res = await worker.fetch(req, env);
       assert.strictEqual(res.status, 400);
 
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       assert.strictEqual(json.ok, false);
       assert.strictEqual(json.error, 'Missing authorization code.');
     });
