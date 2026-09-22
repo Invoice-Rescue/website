@@ -98,8 +98,9 @@ export async function resolveAuth(
 /**
  * Resolves the target clientId for client portal requests:
  * - If client session: strictly enforces session clientId. Rejects mismatching ?client_id with 403.
- * - If admin: uses ?client_id if provided.
- * - If unauthenticated (demo mode): falls back to the first active client.
+ * - If admin: uses ?client_id if provided, otherwise falls back to the first active client.
+ * - If unauthenticated: 401. (Previously fell back to the first active client as "demo mode" —
+ *   that leaked real client data to anonymous requests; see security-findings.md 2026-09-22.)
  */
 export async function resolvePortalClientId(
   request: Request,
@@ -113,25 +114,33 @@ export async function resolvePortalClientId(
   const url = new URL(request.url);
   const queryCid = url.searchParams.get('client_id');
 
-  if (auth) {
-    if (auth.isAdmin) {
-      if (queryCid) return { clientId: Number(queryCid), errorResponse: null };
-    } else {
-      // Authenticated client: strictly isolate tenant
-      if (queryCid && Number(queryCid) !== auth.clientId) {
-        return {
-          clientId: null,
-          errorResponse: Response.json(
-            { ok: false, error: "Forbidden: Cannot access another client's data." },
-            { status: 403, headers: SECURITY_HEADERS }
-          ),
-        };
-      }
-      return { clientId: auth.clientId, errorResponse: null };
-    }
+  if (!auth) {
+    return {
+      clientId: null,
+      errorResponse: new Response('Unauthorized', {
+        status: 401,
+        headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
+      }),
+    };
   }
 
-  // Fallback for admin without client_id or demo unauthenticated mode
+  if (!auth.isAdmin) {
+    // Authenticated client: strictly isolate tenant
+    if (queryCid && Number(queryCid) !== auth.clientId) {
+      return {
+        clientId: null,
+        errorResponse: Response.json(
+          { ok: false, error: "Forbidden: Cannot access another client's data." },
+          { status: 403, headers: SECURITY_HEADERS }
+        ),
+      };
+    }
+    return { clientId: auth.clientId, errorResponse: null };
+  }
+
+  if (queryCid) return { clientId: Number(queryCid), errorResponse: null };
+
+  // Admin without an explicit client_id: default to the first active client.
   const activeClient = await env.DB.prepare(
     `SELECT id FROM clients WHERE status = 'active' ORDER BY id ASC LIMIT 1`
   ).first<{ id: number }>();
