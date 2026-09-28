@@ -20,11 +20,10 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Approve and Enable Auto-Merge for Minor & Patch Updates
+      - name: Enable Auto-Merge for Minor & Patch Updates
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr review --approve "$PR_URL"
           gh pr merge --auto --rebase "$PR_URL"
