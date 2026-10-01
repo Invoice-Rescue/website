@@ -39,6 +39,10 @@ jobs:
       - name: Run TypeScript typecheck
         run: npm run typecheck
 
+      # Static frontend JS is not covered by tsc; ESLint is the only gate on it.
+      - name: Lint (errors only)
+        run: npm run lint:ci
+
       # Unit tests (M4 index/integrity suite) and E2E both need a migrated local
       # D1, and E2E boots `wrangler dev` which needs .dev.vars. CI has neither,
       # so build both here. Values are throwaway, per-run, and never touch the

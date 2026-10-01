@@ -85,6 +85,7 @@ import {
   exchangeCodeForTokens,
   refreshProviderTokens,
   revokeProviderToken,
+  sanitizeReturnPath,
   encryptToken,
   decryptStoredToken,
   resolveTokenEncryptionSecret,
@@ -966,7 +967,7 @@ async function handleOAuthConnect(
     });
   }
 
-  const returnTo = url.searchParams.get('return_to') || '/portal/dashboard';
+  const returnTo = sanitizeReturnPath(url.searchParams.get('return_to'), url.origin);
   const encryptionSecret = await resolveTokenEncryptionSecret(env);
   const state = await generateOAuthState(
     { cid: clientId, p: provider, ret: returnTo },
@@ -1085,11 +1086,16 @@ async function handleOAuthCallback(
     return Response.json({ ok: true, provider, connected: true }, { headers: SECURITY_HEADERS });
   }
 
+  // `ret` was sanitized when the state was minted, but re-validate: state tokens
+  // issued before that fix could still carry an arbitrary value.
+  const redirectUrl = new URL(sanitizeReturnPath(statePayload.ret, url.origin), url.origin);
+  redirectUrl.searchParams.set('connected', provider);
+
   return new Response(null, {
     status: 303,
     headers: {
       ...SECURITY_HEADERS,
-      Location: `${statePayload.ret}?connected=${provider}`,
+      Location: `${redirectUrl.pathname}${redirectUrl.search}`,
     },
   });
 }
@@ -1238,7 +1244,13 @@ async function handleOAuthDisconnect(
     const refreshToken = await decryptStoredToken(conn.refresh_token_encrypted, env);
     await revokeProviderToken(provider, refreshToken, clientCreds);
   } catch (err) {
+    // Keep the local token so the client can retry; deleting it now would
+    // leave a possibly still-active refresh token upstream with no handle to revoke it.
     console.warn(`External token revocation failed for provider ${provider}:`, err);
+    return Response.json(
+      { ok: false, error: 'Could not revoke the connection with the provider. Please retry.' },
+      { status: 502, headers: SECURITY_HEADERS }
+    );
   }
 
   await env.DB.prepare(`DELETE FROM accounting_connections WHERE id = ?1`).bind(conn.id).run();

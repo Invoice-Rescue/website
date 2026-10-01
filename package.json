@@ -17,6 +17,7 @@
     "deps:audit": "npm audit",
     "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
     "lint": "eslint . --cache",
+    "lint:ci": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
@@ -25,7 +26,7 @@
     "test": "tsx --test \"tests/**/*.test.ts\"",
     "e2e": "npx playwright test",
     "db:seed": "tsx scripts/seed-local-db.ts",
-    "verify": "npm run lint:md && npm run typecheck && npm run test && npm run build",
+    "verify": "npm run lint:md && npm run lint:ci && npm run typecheck && npm run test && npm run build",
     "prepare": "husky"
   },
   "repository": {

@@ -556,12 +556,15 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       if (elRecovered) elRecovered.textContent = formatMoney(recoveredMonthPence);
       if (elCount) elCount.textContent = `${overdueCount} Invoices`;
 
-      if (d.client && d.client.company_name) {
+      // /portal/dashboard-data returns companyName and plan as top-level fields.
+      const companyName = d.companyName || (d.client && d.client.company_name);
+      const plan = d.plan || (d.client && d.client.plan);
+      if (companyName) {
         document.querySelectorAll(".client-name").forEach((el) => {
-          el.textContent = d.client.company_name;
+          el.textContent = companyName;
         });
-        if (d.client.plan) {
-          const planCap = d.client.plan.charAt(0).toUpperCase() + d.client.plan.slice(1);
+        if (plan) {
+          const planCap = plan.charAt(0).toUpperCase() + plan.slice(1);
           document.querySelectorAll(".client-plan").forEach((el) => {
             el.innerHTML = `${planCap} Plan · <a href="/portal/billing" style="color:var(--muted); text-decoration:underline;">Billing</a>`;
           });

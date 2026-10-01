@@ -8,6 +8,9 @@ import {
   encryptToken,
   decryptToken,
   resolveTokenEncryptionSecret,
+  sanitizeReturnPath,
+  XERO_REVOKE_URL,
+  QB_REVOKE_URL,
 } from '../backend/src/lib/integrations/oauth-manager';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
 
@@ -22,9 +25,14 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     globalThis.fetch = originalFetch;
   });
 
-  function setupMockProviderFetch() {
+  function setupMockProviderFetch(options: { revokeStatus?: number } = {}) {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = input.toString();
+
+      // Provider token revocation (Xero + QuickBooks)
+      if (url === XERO_REVOKE_URL || url === QB_REVOKE_URL) {
+        return new Response(null, { status: options.revokeStatus ?? 200 });
+      }
 
       // Xero Token Exchange
       if (url === 'https://identity.xero.com/connect/token') {
@@ -420,6 +428,7 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
       .bind(encAccess, encRefresh)
       .run();
 
+    setupMockProviderFetch();
     const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
     const req = new Request('http://localhost/api/oauth/xero/disconnect', {
       method: 'POST',
@@ -440,6 +449,67 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
       .prepare('SELECT accounting_source FROM clients WHERE id = 1')
       .first<any>();
     assert.strictEqual(client.accounting_source, null);
+  });
+
+  test('POST /api/oauth/:provider/disconnect keeps the local token when provider revocation fails', async () => {
+    const { env, db } = createTestEnv();
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
+
+    await db.rawSqlite.exec(`
+      INSERT INTO clients (id, company_name, contact_email, plan, status, accounting_source)
+      VALUES (1, 'Retry Client', 'retry@test.com', 'engine', 'active', 'xero');
+    `);
+
+    const encAccess = await encryptToken('acc', tokenSecret);
+    const encRefresh = await encryptToken('ref', tokenSecret);
+    await db
+      .prepare(
+        `INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
+         VALUES (1, 'xero', 'tenant-123', ?1, ?2, '2026-09-16T12:00:00Z', 'active')`
+      )
+      .bind(encAccess, encRefresh)
+      .run();
+
+    setupMockProviderFetch({ revokeStatus: 503 });
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
+    const res = await worker.fetch(
+      new Request('http://localhost/api/oauth/xero/disconnect', {
+        method: 'POST',
+        headers: { Cookie: sessionCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    assert.strictEqual(res.status, 502);
+
+    const conn = await db
+      .prepare('SELECT id FROM accounting_connections WHERE client_id = 1')
+      .first<{ id: number }>();
+    assert.ok(conn, 'connection row must survive a failed upstream revocation');
+
+    const client = await db
+      .prepare('SELECT accounting_source FROM clients WHERE id = 1')
+      .first<{ accounting_source: string | null }>();
+    assert.strictEqual(client?.accounting_source, 'xero');
+  });
+
+  test('sanitizeReturnPath only allows same-origin relative paths', () => {
+    const origin = 'https://invoicerescue.co.uk';
+    assert.strictEqual(
+      sanitizeReturnPath('/portal/dashboard?tab=x', origin),
+      '/portal/dashboard?tab=x'
+    );
+    assert.strictEqual(sanitizeReturnPath(null, origin), '/portal/dashboard');
+    assert.strictEqual(sanitizeReturnPath('', origin), '/portal/dashboard');
+    for (const hostile of [
+      'https://evil.example/phish',
+      '//evil.example/phish',
+      '/\\evil.example',
+      'javascript:alert(1)',
+      'portal/dashboard',
+    ]) {
+      assert.strictEqual(sanitizeReturnPath(hostile, origin), '/portal/dashboard', hostile);
+    }
   });
 
   test('POST /api/oauth/:provider/disconnect returns 401 when unauthenticated', async () => {
@@ -541,6 +611,7 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(statusJson.tenant_id, 'tenant-admin-5');
 
     // Admin disconnects
+    setupMockProviderFetch();
     const discReq = new Request('http://localhost/api/oauth/xero/disconnect', {
       method: 'POST',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },

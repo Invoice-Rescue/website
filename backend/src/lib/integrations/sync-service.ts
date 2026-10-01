@@ -242,7 +242,11 @@ export class SyncService {
       const refreshToken = await decryptStoredToken(conn.refresh_token_encrypted, this.env);
       await revokeProviderToken(provider, refreshToken, creds);
     } catch (err) {
+      // Keep the local token so the disconnect can be retried.
       console.warn(`External token revocation encountered an error for provider ${provider}:`, err);
+      throw new Error(`Could not revoke ${provider} connection upstream; local token retained.`, {
+        cause: err,
+      });
     }
 
     await this.db.prepare(`DELETE FROM accounting_connections WHERE id = ?1`).bind(conn.id).run();
@@ -391,6 +395,13 @@ export class SyncService {
       return 'created';
     }
 
+    // Open invoices that are not yet past due are not credit-control cases: skip them
+    // now; a later sync imports them once the due date has passed.
+    const today = new Date().toISOString().slice(0, 10);
+    if (norm.dueDate >= today || norm.isDisputedOrVoid) {
+      return 'unchanged';
+    }
+
     // Insert active overdue record
     await this.db
       .prepare(
@@ -522,10 +533,14 @@ export class SyncService {
   }
 
   private normalizeXeroInvoice(inv: any): NormalizedInvoice {
-    const amountDue = typeof inv.AmountDue === 'number' ? inv.AmountDue : (inv.Total ?? 0);
-    const amountPence = Math.max(1, Math.round(amountDue * 100));
+    const total = typeof inv.Total === 'number' ? inv.Total : 0;
+    const amountDue = typeof inv.AmountDue === 'number' ? inv.AmountDue : total;
     const isPaid =
       inv.Status === 'PAID' || (typeof inv.AmountDue === 'number' && inv.AmountDue <= 0);
+    // A settled invoice reports AmountDue = 0; keep its original principal (Total)
+    // rather than collapsing it to the 1p floor. Unpaid/part-paid use what is still owed.
+    const principal = isPaid && total > 0 ? total : amountDue;
+    const amountPence = Math.max(1, Math.round(principal * 100));
     const isDisputedOrVoid = inv.Status === 'VOIDED' || inv.Status === 'DELETED';
 
     const parseXeroDate = (raw: string | undefined): string => {
@@ -602,9 +617,12 @@ export class SyncService {
   }
 
   private normalizeQuickBooksInvoice(inv: any): NormalizedInvoice {
-    const balance = typeof inv.Balance === 'number' ? inv.Balance : (inv.TotalAmt ?? 0);
-    const amountPence = Math.max(1, Math.round(balance * 100));
+    const total = typeof inv.TotalAmt === 'number' ? inv.TotalAmt : 0;
+    const balance = typeof inv.Balance === 'number' ? inv.Balance : total;
     const isPaid = typeof inv.Balance === 'number' && inv.Balance <= 0;
+    // Settled invoices report Balance = 0; keep the original principal (TotalAmt).
+    const principal = isPaid && total > 0 ? total : balance;
+    const amountPence = Math.max(1, Math.round(principal * 100));
     const isDisputedOrVoid = inv.status === 'Deleted' || inv.Status === 'Deleted';
 
     return {

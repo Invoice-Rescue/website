@@ -4,10 +4,10 @@
 
 The comprehensive, opaque-box End-to-End (E2E) test suite for the Invoice Rescue Credit-Control SaaS platform has been designed, implemented, and validated. The suite rigorously verifies the entire system against specifications in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_INFRA.md` without modifying any production code.
 
-- **Total Repo Tests**: 306 passing tests (249 E2E tests + 57 unit/integration tests)
+- **Total Repo Tests**: 587 passing tests (249 E2E tests + 338 unit/integration/adversarial tests)
 - **E2E Test Suites**: 4 test tiers + 1 shared in-memory test harness
 - **Typecheck Result**: Clean compilation (`tsc --noEmit` exits code 0)
-- **Execution Performance**: Full test suite runs in ~4.0 seconds via native Node test runner (`node:test`) and `tsx`
+- **Execution Performance**: Full test suite runs in ~5 seconds via native Node test runner (`node:test`) and `tsx`
 
 ---
 
@@ -135,13 +135,13 @@ Located in `tests/e2e/harness.ts`:
 
 ## Pass/Fail Verification Matrix
 
-| Test Suite                        | Files                                |  Tests  |  Pass   | Fail  | Skip  |  Duration  |
-| --------------------------------- | ------------------------------------ | :-----: | :-----: | :---: | :---: | :--------: |
-| **Tier 1: Feature Coverage**      | `tests/e2e/tier1-features.test.ts`   |   110   |   110   |   0   |   0   |   ~1.02s   |
-| **Tier 2: Boundary & Corners**    | `tests/e2e/tier2-boundaries.test.ts` |   110   |   110   |   0   |   0   |   ~1.10s   |
-| **Tier 3: Pairwise Interactions** | `tests/e2e/tier3-pairwise.test.ts`   |   24    |   24    |   0   |   0   |   ~0.83s   |
-| **Tier 4: Workload Scenarios**    | `tests/e2e/tier4-scenarios.test.ts`  |    5    |    5    |   0   |   0   |   ~0.81s   |
-| **Unit & Integration Suites**     | `tests/*.test.ts`                    |   57    |   57    |   0   |   0   |   ~0.32s   |
-| **TOTAL**                         |                                      | **306** | **306** | **0** | **0** | **~4.08s** |
+| Test Suite                        | Files                                |  Tests  |  Pass   | Fail  | Skip  | Duration  |
+| --------------------------------- | ------------------------------------ | :-----: | :-----: | :---: | :---: | :-------: |
+| **Tier 1: Feature Coverage**      | `tests/e2e/tier1-features.test.ts`   |   110   |   110   |   0   |   0   |  ~1.02s   |
+| **Tier 2: Boundary & Corners**    | `tests/e2e/tier2-boundaries.test.ts` |   110   |   110   |   0   |   0   |  ~1.10s   |
+| **Tier 3: Pairwise Interactions** | `tests/e2e/tier3-pairwise.test.ts`   |   24    |   24    |   0   |   0   |  ~0.83s   |
+| **Tier 4: Workload Scenarios**    | `tests/e2e/tier4-scenarios.test.ts`  |    5    |    5    |   0   |   0   |  ~0.81s   |
+| **Unit & Integration Suites**     | `tests/*.test.ts`                    |   338   |   338   |   0   |   0   |     —     |
+| **TOTAL**                         |                                      | **587** | **587** | **0** | **0** | **~4.9s** |
 
 All tests pass cleanly with zero warnings, zero deprecation notices, and zero leaked timers.

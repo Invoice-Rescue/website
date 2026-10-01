@@ -550,7 +550,11 @@ export async function refreshProviderTokens(
 }
 
 /**
- * Revokes a provider token (best effort).
+ * Revokes a provider token. Throws if the provider could not be reached or
+ * rejected the request, so callers can keep the local token (and allow a
+ * retry) instead of orphaning a still-active refresh token upstream.
+ * A 400 `invalid_token`/`invalid_grant` means the token is already dead
+ * upstream, which is the outcome we wanted.
  */
 export async function revokeProviderToken(
   provider: 'xero' | 'quickbooks',
@@ -560,16 +564,41 @@ export async function revokeProviderToken(
   const revokeUrl = provider === 'xero' ? XERO_REVOKE_URL : QB_REVOKE_URL;
   const basicAuth = btoa(`${clientCredentials.clientId}:${clientCredentials.clientSecret}`);
 
+  const res = await fetch(revokeUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ token }).toString(),
+  });
+
+  if (res.ok) return;
+
+  const body = await res.text().catch(() => '');
+  const alreadyInvalid = res.status === 400 && /invalid_token|invalid_grant/.test(body);
+  if (alreadyInvalid) return;
+
+  throw new Error(`Upstream token revocation failed (${provider}, HTTP ${res.status})`);
+}
+
+/**
+ * Reduces a caller-supplied post-OAuth redirect target to a same-origin
+ * relative path (path + query only). Anything absolute, protocol-relative,
+ * backslash-tricked, or off-origin falls back to the default, preventing the
+ * callback from becoming an open redirect.
+ */
+export function sanitizeReturnPath(
+  raw: string | null | undefined,
+  origin: string,
+  fallback = '/portal/dashboard'
+): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return fallback;
   try {
-    await fetch(revokeUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ token }).toString(),
-    });
-  } catch (err: unknown) {
-    console.warn(`Upstream token revocation failed (${provider}):`, err);
+    const parsed = new URL(raw, origin);
+    if (parsed.origin !== origin) return fallback;
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return fallback;
   }
 }
