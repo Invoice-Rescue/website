@@ -20,7 +20,8 @@
     "run_worker_first": [
       "/api/*",
       "/admin*",
-      "/portal*"
+      "/portal*",
+      "/dashboard*"
     ]
   },
   "d1_databases": [

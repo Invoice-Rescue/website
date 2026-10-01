@@ -7,7 +7,10 @@ import {
   verifyOAuthState,
   encryptToken,
   decryptToken,
-  buildAuthorizationUrl,
+  resolveTokenEncryptionSecret,
+  sanitizeReturnPath,
+  XERO_REVOKE_URL,
+  QB_REVOKE_URL,
 } from '../backend/src/lib/integrations/oauth-manager';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
 
@@ -22,9 +25,14 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     globalThis.fetch = originalFetch;
   });
 
-  function setupMockProviderFetch() {
+  function setupMockProviderFetch(options: { revokeStatus?: number } = {}) {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = input.toString();
+
+      // Provider token revocation (Xero + QuickBooks)
+      if (url === XERO_REVOKE_URL || url === QB_REVOKE_URL) {
+        return new Response(null, { status: options.revokeStatus ?? 200 });
+      }
 
       // Xero Token Exchange
       if (url === 'https://identity.xero.com/connect/token') {
@@ -104,7 +112,11 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
 
   test('HMAC state generation and cryptographic verification', async () => {
     const secret = 'secret-key-32-chars-long-test-123!';
-    const state = await generateOAuthState({ cid: 42, p: 'xero', ret: '/portal/dashboard' }, secret, 600);
+    const state = await generateOAuthState(
+      { cid: 42, p: 'xero', ret: '/portal/dashboard' },
+      secret,
+      600
+    );
     assert.ok(state.includes('.'));
 
     const verified = await verifyOAuthState(state, secret, 'xero');
@@ -120,7 +132,11 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(verifiedTampered, null);
 
     // Wrong secret
-    const verifiedWrongKey = await verifyOAuthState(state, 'wrong-secret-key-that-is-long!!', 'xero');
+    const verifiedWrongKey = await verifyOAuthState(
+      state,
+      'wrong-secret-key-that-is-long!!',
+      'xero'
+    );
     assert.strictEqual(verifiedWrongKey, null);
 
     // Mismatched provider
@@ -174,8 +190,12 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
       VALUES (1, 'Callback Client', 'cb@test.com', 'engine', 'active');
     `);
 
-    const secret = env.PORTAL_SESSION_SECRET;
-    const state = await generateOAuthState({ cid: 1, p: 'xero', ret: '/portal/dashboard' }, secret, 600);
+    const secret = await resolveTokenEncryptionSecret(env);
+    const state = await generateOAuthState(
+      { cid: 1, p: 'xero', ret: '/portal/dashboard' },
+      secret,
+      600
+    );
 
     const callbackUrl = `http://localhost/api/oauth/xero/callback?code=mock_code_123&state=${encodeURIComponent(state)}`;
     const req = new Request(callbackUrl, {
@@ -189,9 +209,11 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(json.connected, true);
 
     // Verify stored connection in D1
-    const conn = await db.prepare(
-      'SELECT client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, status FROM accounting_connections WHERE client_id = 1'
-    ).first<any>();
+    const conn = await db
+      .prepare(
+        'SELECT client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, status FROM accounting_connections WHERE client_id = 1'
+      )
+      .first<any>();
 
     assert.ok(conn);
     assert.strictEqual(conn.provider, 'xero');
@@ -207,7 +229,9 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(decryptedAccess, 'mock-xero-access-token-123');
 
     // Verify client accounting_source was updated
-    const client = await db.prepare('SELECT accounting_source FROM clients WHERE id = 1').first<any>();
+    const client = await db
+      .prepare('SELECT accounting_source FROM clients WHERE id = 1')
+      .first<any>();
     assert.strictEqual(client.accounting_source, 'xero');
   });
 
@@ -219,8 +243,12 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
       VALUES (2, 'QB Client', 'qb@test.com', 'engine', 'active');
     `);
 
-    const secret = env.PORTAL_SESSION_SECRET;
-    const state = await generateOAuthState({ cid: 2, p: 'quickbooks', ret: '/portal/dashboard' }, secret, 600);
+    const secret = await resolveTokenEncryptionSecret(env);
+    const state = await generateOAuthState(
+      { cid: 2, p: 'quickbooks', ret: '/portal/dashboard' },
+      secret,
+      600
+    );
 
     const callbackUrl = `http://localhost/api/oauth/quickbooks/callback?code=mock_qb_code&realmId=123456789012&state=${encodeURIComponent(state)}`;
     const req = new Request(callbackUrl, {
@@ -230,9 +258,9 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     const res = await worker.fetch(req, env);
     assert.strictEqual(res.status, 200);
 
-    const conn = await db.prepare(
-      'SELECT provider, tenant_id, status FROM accounting_connections WHERE client_id = 2'
-    ).first<any>();
+    const conn = await db
+      .prepare('SELECT provider, tenant_id, status FROM accounting_connections WHERE client_id = 2')
+      .first<any>();
 
     assert.ok(conn);
     assert.strictEqual(conn.provider, 'quickbooks');
@@ -241,7 +269,9 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
 
   test('GET /api/oauth/:provider/callback rejects invalid or tampered state', async () => {
     const { env } = createTestEnv();
-    const req = new Request('http://localhost/api/oauth/xero/callback?code=abc&state=completely-invalid-state');
+    const req = new Request(
+      'http://localhost/api/oauth/xero/callback?code=abc&state=completely-invalid-state'
+    );
     const res = await worker.fetch(req, env);
     assert.strictEqual(res.status, 400);
     const json = (await res.json()) as any;
@@ -251,22 +281,27 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
   test('POST /api/oauth/:provider/refresh refreshes tokens and updates expires_at', async () => {
     setupMockProviderFetch();
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status)
       VALUES (1, 'Refresh Client', 'ref@test.com', 'engine', 'active');
     `);
 
-    const encAccess = await encryptToken('old-access-token', secret);
-    const encRefresh = await encryptToken('old-refresh-token', secret);
+    const encAccess = await encryptToken('old-access-token', tokenSecret);
+    const encRefresh = await encryptToken('old-refresh-token', tokenSecret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-123', ?1, ?2, '2026-09-16T00:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
-    const sessionCookie = await buildSessionCookie(1, secret);
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
     const req = new Request('http://localhost/api/oauth/xero/refresh', {
       method: 'POST',
       headers: { Cookie: sessionCookie, 'Content-Type': 'application/json' },
@@ -279,33 +314,40 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(json.ok, true);
     assert.strictEqual(json.refreshed, true);
 
-    const updatedConn = await db.prepare(
-      'SELECT access_token_encrypted, refresh_token_encrypted, status FROM accounting_connections WHERE client_id = 1'
-    ).first<any>();
+    const updatedConn = await db
+      .prepare(
+        'SELECT access_token_encrypted, refresh_token_encrypted, status FROM accounting_connections WHERE client_id = 1'
+      )
+      .first<any>();
 
-    const newDecryptedAccess = await decryptToken(updatedConn.access_token_encrypted, secret);
+    const newDecryptedAccess = await decryptToken(updatedConn.access_token_encrypted, tokenSecret);
     assert.strictEqual(newDecryptedAccess, 'new-xero-access-token-999');
   });
 
   test('POST /api/oauth/:provider/refresh marks status revoked on invalid_grant', async () => {
     setupMockProviderFetch();
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status)
       VALUES (1, 'Revoke Test Client', 'rev@test.com', 'engine', 'active');
     `);
 
-    const encAccess = await encryptToken('access-token', secret);
-    const encRefresh = await encryptToken('revoked_refresh_token', secret);
+    const encAccess = await encryptToken('access-token', tokenSecret);
+    const encRefresh = await encryptToken('revoked_refresh_token', tokenSecret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-123', ?1, ?2, '2026-09-16T00:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
-    const sessionCookie = await buildSessionCookie(1, secret);
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
     const req = new Request('http://localhost/api/oauth/xero/refresh', {
       method: 'POST',
       headers: { Cookie: sessionCookie, 'Content-Type': 'application/json' },
@@ -315,28 +357,35 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     const res = await worker.fetch(req, env);
     assert.strictEqual(res.status, 401);
 
-    const updatedConn = await db.prepare('SELECT status FROM accounting_connections WHERE client_id = 1').first<any>();
+    const updatedConn = await db
+      .prepare('SELECT status FROM accounting_connections WHERE client_id = 1')
+      .first<any>();
     assert.strictEqual(updatedConn.status, 'revoked');
   });
 
   test('GET /api/oauth/:provider/status returns safe connection metadata without exposing tokens', async () => {
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status)
       VALUES (1, 'Status Client', 'status@test.com', 'engine', 'active');
     `);
 
-    const encAccess = await encryptToken('top-secret-access', secret);
-    const encRefresh = await encryptToken('top-secret-refresh', secret);
+    const encAccess = await encryptToken('top-secret-access', tokenSecret);
+    const encRefresh = await encryptToken('top-secret-refresh', tokenSecret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-org-777', ?1, ?2, '2026-09-16T12:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
-    const sessionCookie = await buildSessionCookie(1, secret);
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
     const req = new Request('http://localhost/api/oauth/xero/status', {
       headers: { Cookie: sessionCookie },
     });
@@ -359,22 +408,28 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
 
   test('POST /api/oauth/:provider/disconnect cleans up connection and client state', async () => {
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status, accounting_source)
       VALUES (1, 'Disconnect Client', 'disc@test.com', 'engine', 'active', 'xero');
     `);
 
-    const encAccess = await encryptToken('acc', secret);
-    const encRefresh = await encryptToken('ref', secret);
+    const encAccess = await encryptToken('acc', tokenSecret);
+    const encRefresh = await encryptToken('ref', tokenSecret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-123', ?1, ?2, '2026-09-16T12:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
-    const sessionCookie = await buildSessionCookie(1, secret);
+    setupMockProviderFetch();
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
     const req = new Request('http://localhost/api/oauth/xero/disconnect', {
       method: 'POST',
       headers: { Cookie: sessionCookie, 'Content-Type': 'application/json' },
@@ -385,16 +440,81 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(res.status, 200);
 
     // Database check
-    const conn = await db.prepare('SELECT id FROM accounting_connections WHERE client_id = 1').first<any>();
+    const conn = await db
+      .prepare('SELECT id FROM accounting_connections WHERE client_id = 1')
+      .first<any>();
     assert.strictEqual(conn, null);
 
-    const client = await db.prepare('SELECT accounting_source FROM clients WHERE id = 1').first<any>();
+    const client = await db
+      .prepare('SELECT accounting_source FROM clients WHERE id = 1')
+      .first<any>();
     assert.strictEqual(client.accounting_source, null);
+  });
+
+  test('POST /api/oauth/:provider/disconnect keeps the local token when provider revocation fails', async () => {
+    const { env, db } = createTestEnv();
+    const tokenSecret = await resolveTokenEncryptionSecret(env);
+
+    await db.rawSqlite.exec(`
+      INSERT INTO clients (id, company_name, contact_email, plan, status, accounting_source)
+      VALUES (1, 'Retry Client', 'retry@test.com', 'engine', 'active', 'xero');
+    `);
+
+    const encAccess = await encryptToken('acc', tokenSecret);
+    const encRefresh = await encryptToken('ref', tokenSecret);
+    await db
+      .prepare(
+        `INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
+         VALUES (1, 'xero', 'tenant-123', ?1, ?2, '2026-09-16T12:00:00Z', 'active')`
+      )
+      .bind(encAccess, encRefresh)
+      .run();
+
+    setupMockProviderFetch({ revokeStatus: 503 });
+    const sessionCookie = await buildSessionCookie(1, env.PORTAL_SESSION_SECRET);
+    const res = await worker.fetch(
+      new Request('http://localhost/api/oauth/xero/disconnect', {
+        method: 'POST',
+        headers: { Cookie: sessionCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      env
+    );
+    assert.strictEqual(res.status, 502);
+
+    const conn = await db
+      .prepare('SELECT id FROM accounting_connections WHERE client_id = 1')
+      .first<{ id: number }>();
+    assert.ok(conn, 'connection row must survive a failed upstream revocation');
+
+    const client = await db
+      .prepare('SELECT accounting_source FROM clients WHERE id = 1')
+      .first<{ accounting_source: string | null }>();
+    assert.strictEqual(client?.accounting_source, 'xero');
+  });
+
+  test('sanitizeReturnPath only allows same-origin relative paths', () => {
+    const origin = 'https://invoicerescue.co.uk';
+    assert.strictEqual(
+      sanitizeReturnPath('/portal/dashboard?tab=x', origin),
+      '/portal/dashboard?tab=x'
+    );
+    assert.strictEqual(sanitizeReturnPath(null, origin), '/portal/dashboard');
+    assert.strictEqual(sanitizeReturnPath('', origin), '/portal/dashboard');
+    for (const hostile of [
+      'https://evil.example/phish',
+      '//evil.example/phish',
+      '/\\evil.example',
+      'javascript:alert(1)',
+      'portal/dashboard',
+    ]) {
+      assert.strictEqual(sanitizeReturnPath(hostile, origin), '/portal/dashboard', hostile);
+    }
   });
 
   test('POST /api/oauth/:provider/disconnect returns 401 when unauthenticated', async () => {
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const secret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status, accounting_source)
@@ -404,10 +524,15 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     const encAccess = await encryptToken('acc', secret);
     const encRefresh = await encryptToken('ref', secret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (2, 'xero', 'tenant-2', ?1, ?2, '2026-09-16T12:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
     const req = new Request('http://localhost/api/oauth/xero/disconnect', {
       method: 'POST',
@@ -421,7 +546,9 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(json.error, 'Unauthorized');
 
     // Connection MUST NOT be deleted
-    const conn = await db.prepare('SELECT id FROM accounting_connections WHERE client_id = 2').first<any>();
+    const conn = await db
+      .prepare('SELECT id FROM accounting_connections WHERE client_id = 2')
+      .first<any>();
     assert.ok(conn, 'Connection must remain intact');
   });
 
@@ -451,7 +578,7 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
 
   test('Admin authentication allows managing client connections via client_id', async () => {
     const { env, db } = createTestEnv();
-    const secret = env.PORTAL_SESSION_SECRET;
+    const secret = await resolveTokenEncryptionSecret(env);
 
     await db.rawSqlite.exec(`
       INSERT INTO clients (id, company_name, contact_email, plan, status, accounting_source)
@@ -461,10 +588,15 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     const encAccess = await encryptToken('admin-acc', secret);
     const encRefresh = await encryptToken('admin-ref', secret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (5, 'xero', 'tenant-admin-5', ?1, ?2, '2026-10-01T00:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
     const authHeader = `Basic ${btoa(`admin:${env.ADMIN_SECRET}`)}`;
 
@@ -479,6 +611,7 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     assert.strictEqual(statusJson.tenant_id, 'tenant-admin-5');
 
     // Admin disconnects
+    setupMockProviderFetch();
     const discReq = new Request('http://localhost/api/oauth/xero/disconnect', {
       method: 'POST',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
@@ -487,7 +620,9 @@ describe('OAuth 2.0 Connection Lifecycle & Endpoints', () => {
     const discRes = await worker.fetch(discReq, env);
     assert.strictEqual(discRes.status, 200);
 
-    const postConn = await db.prepare('SELECT id FROM accounting_connections WHERE client_id = 5').first();
+    const postConn = await db
+      .prepare('SELECT id FROM accounting_connections WHERE client_id = 5')
+      .first();
     assert.strictEqual(postConn, null);
   });
 });

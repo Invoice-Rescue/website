@@ -1,4 +1,10 @@
-export async function verifyQuickBooksWebhook(payload: string, signatureHeader: string, verifierToken: string): Promise<boolean> {
+export async function verifyQuickBooksWebhook(
+  payload: string,
+  signatureHeader: string,
+  verifierToken: string
+): Promise<boolean> {
+  // Fail closed if QUICKBOOKS_VERIFIER_TOKEN is unset, same reasoning as stripe.ts's verifyWebhookSignature.
+  if (!verifierToken) return false;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
@@ -8,18 +14,20 @@ export async function verifyQuickBooksWebhook(payload: string, signatureHeader: 
     ['sign']
   );
 
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    encoder.encode(payload)
-  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
 
   const computedSignatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-  
+
   return timingSafeEqual(computedSignatureBase64, signatureHeader);
 }
 
-export async function verifyXeroWebhook(payload: string, signatureHeader: string, webhookKey: string): Promise<boolean> {
+export async function verifyXeroWebhook(
+  payload: string,
+  signatureHeader: string,
+  webhookKey: string
+): Promise<boolean> {
+  // Fail closed if XERO_WEBHOOK_KEY is unset, same reasoning as stripe.ts's verifyWebhookSignature.
+  if (!webhookKey) return false;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
@@ -29,14 +37,10 @@ export async function verifyXeroWebhook(payload: string, signatureHeader: string
     ['sign']
   );
 
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    encoder.encode(payload)
-  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
 
   const computedSignatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-  
+
   return timingSafeEqual(computedSignatureBase64, signatureHeader);
 }
 
@@ -58,7 +62,10 @@ export function parseQuickBooksInvoiceUpdate(payload: string): { id: string; sta
         if (notification.dataChangeEvent?.entities) {
           for (const entity of notification.dataChangeEvent.entities) {
             if (entity.name === 'Invoice') {
-              updates.push({ id: entity.id, status: entity.operation === 'Update' ? 'updated' : 'created' });
+              updates.push({
+                id: entity.id,
+                status: entity.operation === 'Update' ? 'updated' : 'created',
+              });
             }
           }
         }

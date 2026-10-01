@@ -16,13 +16,18 @@
     "deps:update": "npm update && npm run typecheck && npm run build",
     "deps:audit": "npm audit",
     "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
+    "lint": "eslint . --cache",
+    "lint:ci": "eslint . --quiet",
+    "lint:fix": "eslint . --fix",
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
-    "lint": "npm run lint:md && npm run typecheck",
-    "test": "npx tsx --test tests/**/*.test.ts",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
     "e2e": "npx playwright test",
     "db:seed": "tsx scripts/seed-local-db.ts",
-    "verify": "npm run lint && npm run test && npm run build"
+    "verify": "npm run lint:md && npm run lint:ci && npm run typecheck && npm run test && npm run build",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -47,5 +52,14 @@
   },
   "overrides": {
     "smol-toml": "^1.7.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
   }
 }

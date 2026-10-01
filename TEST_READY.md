@@ -4,10 +4,10 @@
 
 The comprehensive, opaque-box End-to-End (E2E) test suite for the Invoice Rescue Credit-Control SaaS platform has been designed, implemented, and validated. The suite rigorously verifies the entire system against specifications in `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_INFRA.md` without modifying any production code.
 
-- **Total Repo Tests**: 306 passing tests (249 E2E tests + 57 unit/integration tests)
+- **Total Repo Tests**: 587 passing tests (249 E2E tests + 338 unit/integration/adversarial tests)
 - **E2E Test Suites**: 4 test tiers + 1 shared in-memory test harness
 - **Typecheck Result**: Clean compilation (`tsc --noEmit` exits code 0)
-- **Execution Performance**: Full test suite runs in ~4.0 seconds via native Node test runner (`node:test`) and `tsx`
+- **Execution Performance**: Full test suite runs in ~5 seconds via native Node test runner (`node:test`) and `tsx`
 
 ---
 

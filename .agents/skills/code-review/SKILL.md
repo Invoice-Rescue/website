@@ -1,6 +1,9 @@
 ---
 name: code-review
-description: Code review — local uncommitted changes or GitHub PR (pass PR number/URL for PR mode)
+description: >-
+  Comprehensive security and quality code review for local uncommitted changes or
+  GitHub PRs. Use when reviewing changes before committing, before creating a PR,
+  or during PR review. Pass PR number/URL for PR mode.
 argument-hint: [pr-number | pr-url | blank for local review]
 ---
 
@@ -39,6 +42,7 @@ If no changed files, stop: "Nothing to review."
 Read each changed file in full. Check for:
 
 **Security Issues (CRITICAL):**
+
 - Hardcoded credentials, API keys, tokens
 - SQL injection vulnerabilities
 - XSS vulnerabilities
@@ -47,6 +51,7 @@ Read each changed file in full. Check for:
 - Path traversal risks
 
 **Code Quality (HIGH):**
+
 - Functions > 50 lines
 - Files > 800 lines
 - Nesting depth > 4 levels
@@ -56,6 +61,7 @@ Read each changed file in full. Check for:
 - Missing JSDoc for public APIs
 
 **Best Practices (MEDIUM):**
+
 - Mutation patterns (use immutable instead)
 - Emoji usage in code/comments
 - Missing tests for new code
@@ -64,6 +70,7 @@ Read each changed file in full. Check for:
 ### Phase 3 — REPORT
 
 Generate report with:
+
 - Severity: CRITICAL, HIGH, MEDIUM, LOW
 - File location and line numbers
 - Issue description
@@ -82,11 +89,11 @@ Comprehensive GitHub PR review — fetches diff, reads full files, runs validati
 
 Parse input to determine PR:
 
-| Input | Action |
-|---|---|
-| Number (e.g. `42`) | Use as PR number |
-| URL (`github.com/.../pull/42`) | Extract PR number |
-| Branch name | Find PR via `gh pr list --head <branch>` |
+| Input                          | Action                                   |
+| ------------------------------ | ---------------------------------------- |
+| Number (e.g. `42`)             | Use as PR number                         |
+| URL (`github.com/.../pull/42`) | Extract PR number                        |
+| Branch name                    | Find PR via `gh pr list --head <branch>` |
 
 ```bash
 gh pr view <NUMBER> --json number,title,body,author,baseRefName,headRefName,changedFiles,additions,deletions
@@ -109,6 +116,7 @@ Build review context:
 Read each changed file **in full** (not just the diff hunks — you need surrounding context).
 
 For PR reviews, fetch the full file contents at the PR head revision:
+
 ```bash
 gh pr diff <NUMBER> --name-only | while IFS= read -r file; do
   gh api "repos/{owner}/{repo}/contents/$file?ref=<head-branch>" --jq '.content' | base64 -d
@@ -117,24 +125,24 @@ done
 
 Apply the review checklist across 7 categories:
 
-| Category | What to Check |
-|---|---|
-| **Correctness** | Logic errors, off-by-ones, null handling, edge cases, race conditions |
-| **Type Safety** | Type mismatches, unsafe casts, `any` usage, missing generics |
+| Category               | What to Check                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| **Correctness**        | Logic errors, off-by-ones, null handling, edge cases, race conditions         |
+| **Type Safety**        | Type mismatches, unsafe casts, `any` usage, missing generics                  |
 | **Pattern Compliance** | Matches project conventions (naming, file structure, error handling, imports) |
-| **Security** | Injection, auth gaps, secret exposure, SSRF, path traversal, XSS |
-| **Performance** | N+1 queries, missing indexes, unbounded loops, memory leaks, large payloads |
-| **Completeness** | Missing tests, missing error handling, incomplete migrations, missing docs |
-| **Maintainability** | Dead code, magic numbers, deep nesting, unclear naming, missing types |
+| **Security**           | Injection, auth gaps, secret exposure, SSRF, path traversal, XSS              |
+| **Performance**        | N+1 queries, missing indexes, unbounded loops, memory leaks, large payloads   |
+| **Completeness**       | Missing tests, missing error handling, incomplete migrations, missing docs    |
+| **Maintainability**    | Dead code, magic numbers, deep nesting, unclear naming, missing types         |
 
 Assign severity to each finding:
 
-| Severity | Meaning | Action |
-|---|---|---|
-| **CRITICAL** | Security vulnerability or data loss risk | Must fix before merge |
-| **HIGH** | Bug or logic error likely to cause issues | Should fix before merge |
-| **MEDIUM** | Code quality issue or missing best practice | Fix recommended |
-| **LOW** | Style nit or minor suggestion | Optional |
+| Severity     | Meaning                                     | Action                  |
+| ------------ | ------------------------------------------- | ----------------------- |
+| **CRITICAL** | Security vulnerability or data loss risk    | Must fix before merge   |
+| **HIGH**     | Bug or logic error likely to cause issues   | Should fix before merge |
+| **MEDIUM**   | Code quality issue or missing best practice | Fix recommended         |
+| **LOW**      | Style nit or minor suggestion               | Optional                |
 
 ### Phase 4 — VALIDATE
 
@@ -143,6 +151,7 @@ Run available validation commands:
 Detect the project type from config files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.), then run the appropriate commands:
 
 **Node.js / TypeScript** (has `package.json`):
+
 ```bash
 npm run typecheck 2>/dev/null || npx tsc --noEmit 2>/dev/null  # Type check
 npm run lint                                                    # Lint
@@ -151,6 +160,7 @@ npm run build                                                   # Build
 ```
 
 **Rust** (has `Cargo.toml`):
+
 ```bash
 cargo clippy -- -D warnings  # Lint
 cargo test                   # Tests
@@ -158,6 +168,7 @@ cargo build                  # Build
 ```
 
 **Go** (has `go.mod`):
+
 ```bash
 go vet ./...    # Lint
 go test ./...   # Tests
@@ -165,6 +176,7 @@ go build ./...  # Build
 ```
 
 **Python** (has `pyproject.toml` / `setup.py`):
+
 ```bash
 pytest  # Tests
 ```
@@ -175,14 +187,15 @@ Run only the commands that apply to the detected project type. Record pass/fail 
 
 Form recommendation based on findings:
 
-| Condition | Decision |
-|---|---|
-| Zero CRITICAL/HIGH issues, validation passes | **APPROVE** |
-| Only MEDIUM/LOW issues, validation passes | **APPROVE** with comments |
-| Any HIGH issues or validation failures | **REQUEST CHANGES** |
-| Any CRITICAL issues | **BLOCK** — must fix before merge |
+| Condition                                    | Decision                          |
+| -------------------------------------------- | --------------------------------- |
+| Zero CRITICAL/HIGH issues, validation passes | **APPROVE**                       |
+| Only MEDIUM/LOW issues, validation passes    | **APPROVE** with comments         |
+| Any HIGH issues or validation failures       | **REQUEST CHANGES**               |
+| Any CRITICAL issues                          | **BLOCK** — must fix before merge |
 
 Special cases:
+
 - Draft PR → Always use **COMMENT** (not approve/block)
 - Only docs/config changes → Lighter review, focus on correctness
 - Explicit `--approve` or `--request-changes` flag → Override decision (but still report all findings)
@@ -200,32 +213,38 @@ Create review artifact at `.claude/reviews/pr-<NUMBER>-review.md` unless the rep
 **Decision**: APPROVE | REQUEST CHANGES | BLOCK
 
 ## Summary
+
 <1-2 sentence overall assessment>
 
 ## Findings
 
 ### CRITICAL
+
 <findings or "None">
 
 ### HIGH
+
 <findings or "None">
 
 ### MEDIUM
+
 <findings or "None">
 
 ### LOW
+
 <findings or "None">
 
 ## Validation Results
 
-| Check | Result |
-|---|---|
+| Check      | Result                |
+| ---------- | --------------------- |
 | Type check | Pass / Fail / Skipped |
-| Lint | Pass / Fail / Skipped |
-| Tests | Pass / Fail / Skipped |
-| Build | Pass / Fail / Skipped |
+| Lint       | Pass / Fail / Skipped |
+| Tests      | Pass / Fail / Skipped |
+| Build      | Pass / Fail / Skipped |
 
 ## Files Reviewed
+
 <list of files with change type: Added/Modified/Deleted>
 ```
 
@@ -245,6 +264,7 @@ gh pr review <NUMBER> --comment --body "<summary>"
 ```
 
 For inline comments on specific lines, use the GitHub review comments API:
+
 ```bash
 gh api "repos/{owner}/{repo}/pulls/<NUMBER>/comments" \
   -f body="<comment>" \
@@ -255,6 +275,7 @@ gh api "repos/{owner}/{repo}/pulls/<NUMBER>/comments" \
 ```
 
 Alternatively, post a single review with multiple inline comments at once:
+
 ```bash
 gh api "repos/{owner}/{repo}/pulls/<NUMBER>/reviews" \
   -f event="COMMENT" \

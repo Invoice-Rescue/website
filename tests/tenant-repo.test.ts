@@ -10,9 +10,6 @@ import {
   getAccountingConnection,
   upsertAccountingConnection,
   resolveClientByAccountingTenant,
-  getTenantDrafts,
-  approveTenantDraft,
-  skipTenantDraft,
   TenantRepository,
   InvalidTenantError,
   InvalidInvoiceDataError,
@@ -32,7 +29,7 @@ describe('Tenant Repository & Multi-Tenant Data Isolation', () => {
     const db = createTestDb() as unknown as D1Database;
     assert.rejects(async () => getTenantInvoices(db, 0), InvalidTenantError);
     assert.rejects(async () => getTenantInvoices(db, -1), InvalidTenantError);
-    assert.rejects(async () => getTenantInvoices(db, 1.5 as any), InvalidTenantError);
+    assert.rejects(async () => getTenantInvoices(db, 1.5), InvalidTenantError);
     assert.rejects(async () => getTenantInvoices(db, '1' as any), InvalidTenantError);
     assert.rejects(async () => getTenantInvoices(db, null as any), InvalidTenantError);
   });

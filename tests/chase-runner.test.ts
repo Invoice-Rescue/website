@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { createTestEnv } from "./e2e/harness";
-import { runOverdueDetection, parseDate, diffDays, generateFallbackDraft } from "../backend/src/lib/chase-runner";
+import { runOverdueDetection, parseDate, diffDays } from "../backend/src/lib/chase-runner";
 
 describe("Chase Runner: Credit-Control Escalation & Statutory Calculation Engine", () => {
   // =========================================================================

@@ -1,5 +1,4 @@
-﻿{
-  "$schema": "C:/Users/bossm/.gemini/config/skills/vault-map.schema.json",
+{
   "target": ".dev.vars",
   "project": "invoice-rescue",
   "vars": [
