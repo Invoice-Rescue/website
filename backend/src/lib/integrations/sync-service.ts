@@ -532,7 +532,8 @@ export class SyncService {
     return inv ? this.normalizeXeroInvoice(inv) : null;
   }
 
-  private normalizeXeroInvoice(inv: any): NormalizedInvoice {
+  /** Pure mapping from a Xero invoice payload; public so it can be unit-tested directly. */
+  normalizeXeroInvoice(inv: any): NormalizedInvoice {
     const total = typeof inv.Total === 'number' ? inv.Total : 0;
     const amountDue = typeof inv.AmountDue === 'number' ? inv.AmountDue : total;
     const isPaid =
@@ -616,7 +617,8 @@ export class SyncService {
     return data.Invoice ? this.normalizeQuickBooksInvoice(data.Invoice) : null;
   }
 
-  private normalizeQuickBooksInvoice(inv: any): NormalizedInvoice {
+  /** Pure mapping from a QuickBooks invoice payload; public so it can be unit-tested directly. */
+  normalizeQuickBooksInvoice(inv: any): NormalizedInvoice {
     const total = typeof inv.TotalAmt === 'number' ? inv.TotalAmt : 0;
     const balance = typeof inv.Balance === 'number' ? inv.Balance : total;
     const isPaid = typeof inv.Balance === 'number' && inv.Balance <= 0;
