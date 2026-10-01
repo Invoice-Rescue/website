@@ -1,4 +1,4 @@
-import { EscalationStage, TERMINAL_STAGES, InvoiceEscalationState, ChaseHistoryRow, EscalationDecision } from '../types/core';
+import { InvoiceEscalationState, ChaseHistoryRow, EscalationDecision } from '../types/core';
 export type { ChaseHistoryRow };
 
 export const CADENCE_DAYS = [1, 8, 15, 22];

@@ -10,10 +10,7 @@ import {
   buildSessionCookie,
   verifySessionToken,
   signLoginToken,
-  verifyLoginToken,
 } from "../../backend/src/lib/portal-auth";
-import { renderPortalDashboard } from "../../backend/src/lib/portal";
-import { renderReviewQueue } from "../../backend/src/lib/admin";
 import { InvoiceEscalationState } from "../../backend/src/types/core";
 
 describe("Tier 3: Pairwise Combinatorial Interactions", () => {

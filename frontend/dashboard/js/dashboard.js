@@ -504,7 +504,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
             data = JSON.parse(text);
           }
         }
-      } catch (_) {
+      } catch {
         data = null;
       }
       if (!res.ok) {
@@ -523,7 +523,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       if (res.ok && res.data?.boeBaseRatePercent) {
         boeBaseRatePercent = Number(res.data.boeBaseRatePercent);
       }
-    } catch (e) {
+    } catch {
       // Quiet fallback to 3.75%
     }
   }
@@ -555,6 +555,21 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       if (elActive) elActive.textContent = formatMoney(activeChasingPence);
       if (elRecovered) elRecovered.textContent = formatMoney(recoveredMonthPence);
       if (elCount) elCount.textContent = `${overdueCount} Invoices`;
+
+      // /portal/dashboard-data returns companyName and plan as top-level fields.
+      const companyName = d.companyName || (d.client && d.client.company_name);
+      const plan = d.plan || (d.client && d.client.plan);
+      if (companyName) {
+        document.querySelectorAll(".client-name").forEach((el) => {
+          el.textContent = companyName;
+        });
+        if (plan) {
+          const planCap = plan.charAt(0).toUpperCase() + plan.slice(1);
+          document.querySelectorAll(".client-plan").forEach((el) => {
+            el.innerHTML = `${planCap} Plan · <a href="/portal/billing" style="color:var(--muted); text-decoration:underline;">Billing</a>`;
+          });
+        }
+      }
 
       // Aging breakdown
       const aging = d.agingBreakdown || {};
@@ -1094,7 +1109,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       }
 
       queueList.innerHTML = drafts
-        .map((draft, idx) => {
+        .map((draft) => {
           const compensationPence = computeFixedCompensationPence(draft.amount_pence);
           const interestPence = computeStatutoryInterestPence(draft.amount_pence, draft.days_overdue);
           const totalClaimPence = draft.amount_pence + compensationPence + interestPence;
@@ -1347,7 +1362,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
         if (!res.ok && res.status === 404) {
           await apiFetch(`/api/chase/${id}/skip`, { method: "POST" });
         }
-      } catch (e) {
+      } catch {
         // Offline / mock fallback
       }
 

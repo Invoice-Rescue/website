@@ -27,6 +27,32 @@ node_modules/
 *.tmp
 *.tsbuildinfo
 .cache/
+.eslintcache/
+.eslintcache
+
+# Local tools, reviews & memory graphs
+graphify-out/
+.claude/reviews/
+skills-lock.json
 
 # Hookify local rules
 .claude/*.local.md
+
+# Compiled build artifacts in source/test directories
+backend/src/**/*.js
+backend/src/**/*.d.ts
+tests/**/*.js
+tests/**/*.d.ts
+
+# Clean Code Standards (Secrets & Artifacts)
+.env*.local
+dist/
+build/
+.next/
+coverage/
+.turbo/
+
+# Test run output — regenerated on every run, never source
+playwright-report/
+playwright-results.json
+test-results/

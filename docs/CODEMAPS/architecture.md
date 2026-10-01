@@ -1,4 +1,5 @@
 <!-- Generated: 2026-09-14 | Files scanned: 31 | Token estimate: ~750 -->
+
 # Architecture Codemap
 
 ## System Overview
@@ -10,7 +11,7 @@ Invoice Rescue is an AI-assisted credit-control service for UK service businesse
       │
       ├── Static Assets (/ , /terms, /privacy, /compare/*) ──> [ Cloudflare Worker Assets ] (frontend/)
       │
-      └── Dynamic API & Portals (/api/*, /admin, /portal/*) ──> [ Cloudflare Worker Router ] (backend/src/index.ts)
+      └── Dynamic API & Portals (/api/*, /admin, /portal/*, /dashboard/*) ──> [ Cloudflare Worker Router ] (backend/src/index.ts)
                                                                        │
                          ┌─────────────────────────────────────────────┼──────────────────────────────┐
                          ▼                                             ▼                              ▼
@@ -18,20 +19,22 @@ Invoice Rescue is an AI-assisted credit-control service for UK service businesse
                  (invoice-rescue-db)                           (direct fetch)                (Cloudflare Bindings)
                  - leads                                       - Google Gemini               - env.NOTIFY (Operator)
                  - clients                                     - Stripe API                  - env.SEND (Debtors/Magic links)
-                 - invoices
+                 - invoices                                    - Xero / QuickBooks
                  - chase_log
+                 - accounting_connections
+                 - accounting_webhook_events
 ```
 
 ## Service Boundaries
 
-| Boundary | Technology | Primary Location | Responsibility |
-| --- | --- | --- | --- |
-| **Static Edge Assets** | HTML / CSS / JS | `frontend/` | Public landing page, calculators, SEO, and static legal documents |
-| **API & Request Router** | Cloudflare Worker (TS) | `backend/src/index.ts` | Routing, request validation, authentication, and responses |
-| **Domain Logic** | Modular TypeScript | `backend/src/lib/` | Statutory calculations, escalation cadence, AI prompt drafting, auth |
-| **Scheduled Tasks** | Cloudflare Cron Triggers | `backend/src/index.ts` | Daily overdue detection (`06:00 UTC`) & weekly cash reports (`08:00 UTC Fri`) |
-| **Database Layer** | Cloudflare D1 (SQLite) | `backend/db/migrations/` | Relational storage with CHECK constraints and unique guards |
-| **Outbound Email** | Worker `send_email` | Cloudflare Worker Bindings | Split-trust email delivery (`NOTIFY` operator, `SEND` public) |
+| Boundary                 | Technology               | Primary Location           | Responsibility                                                                |
+| ------------------------ | ------------------------ | -------------------------- | ----------------------------------------------------------------------------- |
+| **Static Edge Assets**   | HTML / CSS / JS          | `frontend/`                | Public landing page, calculators, SEO, and static legal documents             |
+| **API & Request Router** | Cloudflare Worker (TS)   | `backend/src/index.ts`     | Routing, request validation, authentication, and responses                    |
+| **Domain Logic**         | Modular TypeScript       | `backend/src/lib/`         | Statutory calculations, escalation cadence, AI prompt drafting, auth          |
+| **Scheduled Tasks**      | Cloudflare Cron Triggers | `backend/src/index.ts`     | Daily overdue detection (`06:00 UTC`) & weekly cash reports (`08:00 UTC Fri`) |
+| **Database Layer**       | Cloudflare D1 (SQLite)   | `backend/db/migrations/`   | Relational storage with CHECK constraints and unique guards                   |
+| **Outbound Email**       | Worker `send_email`      | Cloudflare Worker Bindings | Split-trust email delivery (`NOTIFY` operator, `SEND` public)                 |
 
 ## Data Flows
 

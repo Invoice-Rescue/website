@@ -5,9 +5,6 @@ import {
   sendDebtorCommunication,
   isValidEmail,
   formatDebtorSignoff,
-  SENDER_NAME,
-  LOCKED_SENDER_EMAIL,
-  OPERATOR_INBOX_EMAIL,
 } from "../backend/src/lib/email";
 import { runOverdueDetection } from "../backend/src/lib/chase-runner";
 import { handleApproveDraft } from "../backend/src/lib/portal-api";
@@ -68,7 +65,7 @@ describe("Milestone M4 Stress Suite — Challenger 1 (Split-Trust Email Resilien
           notifyCallCount++;
           throw new Error(`ETIMEDOUT: Connection refused to Cloudflare Mail Edge on attempt ${notifyCallCount}`);
         },
-      } as any;
+      };
 
       // Execute cron detection
       const result = await runOverdueDetection(env);
@@ -105,7 +102,7 @@ describe("Milestone M4 Stress Suite — Challenger 1 (Split-Trust Email Resilien
           // Simulate fatal JS runtime error in transport layer
           throw new TypeError("Cannot read properties of undefined (reading 'raw')");
         },
-      } as any;
+      };
 
       const success = await sendOperatorNotification(env, "Subject", "Body");
       assert.strictEqual(success, false, "Must return false on runtime TypeError without rethrowing");
@@ -120,7 +117,7 @@ describe("Milestone M4 Stress Suite — Challenger 1 (Split-Trust Email Resilien
           domErr.name = "AbortError";
           throw domErr;
         },
-      } as any;
+      };
 
       const success = await sendOperatorNotification(env, "Urgent Notice", "Payload");
       assert.strictEqual(success, false, "Must return false on AbortError");
@@ -268,7 +265,7 @@ describe("Milestone M4 Stress Suite — Challenger 1 (Split-Trust Email Resilien
       );
 
       // 3. Date (RFC 2822)
-      const dateHeader = msg.headers["Date"];
+      const dateHeader = msg.headers.Date;
       assert.ok(dateHeader, "Date header must exist");
       const parsedEpoch = Date.parse(dateHeader);
       assert.ok(!isNaN(parsedEpoch), "Date header must be valid RFC 2822 date string");

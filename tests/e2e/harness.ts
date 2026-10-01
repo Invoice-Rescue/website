@@ -24,7 +24,7 @@ export class MockEmailBinding {
 
 export interface TestD1Database {
   prepare(sql: string): TestD1PreparedStatement;
-  batch<T = unknown>(statements: TestD1PreparedStatement[]): Promise<Array<{ results: T[]; meta: { changes: number; last_row_id: number } }>>;
+  batch<T = unknown>(statements: TestD1PreparedStatement[]): Promise<{ results: T[]; meta: { changes: number; last_row_id: number } }[]>;
   exec(query: string): Promise<{ count: number; duration: number }>;
   rawSqlite: DatabaseSync;
 }
@@ -158,7 +158,7 @@ export function createTestEnv(overrides?: Partial<Env>): TestEnvFixture {
   return { env, db, notify, send };
 }
 
-export function createBasicAuthHeader(secret: string = "admin-test-secret-12345"): string {
+export function createBasicAuthHeader(secret = "admin-test-secret-12345"): string {
   return `Basic ${btoa(`admin:${secret}`)}`;
 }
 

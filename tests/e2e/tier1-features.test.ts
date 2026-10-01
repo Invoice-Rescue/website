@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createTestEnv, createBasicAuthHeader, signHmacSha256, signStripeWebhook } from "./harness";
 import worker from "../../backend/src/index";
 import { statutoryInterestPence, fixedCompensationPence } from "../../backend/src/lib/statutory-interest";
-import { nextStepDue, advanceEscalationStage, STEP_LABELS, CADENCE_DAYS } from "../../backend/src/lib/escalation";
+import { nextStepDue, advanceEscalationStage } from "../../backend/src/lib/escalation";
 import { buildChasePrompt } from "../../backend/src/lib/gemini";
 import { encryptToken, decryptToken } from "../../backend/src/lib/integrations/oauth-manager";
 import {
@@ -15,11 +15,7 @@ import {
   parseXeroInvoiceUpdate,
 } from "../../backend/src/lib/integrations/webhooks";
 import {
-  signLoginToken,
-  verifyLoginToken,
   buildSessionCookie,
-  clearSessionCookie,
-  authenticateClient,
 } from "../../backend/src/lib/portal-auth";
 import { renderReviewQueue, escapeHtml } from "../../backend/src/lib/admin";
 import { renderPortalDashboard, renderPortalLogin } from "../../backend/src/lib/portal";
@@ -1728,7 +1724,7 @@ describe("Tier 1: Feature Coverage (Opaque-Box)", () => {
       const { db } = createTestEnv();
       const tables = db.rawSqlite.prepare(`
         SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;
-      `).all() as Array<{ name: string }>;
+      `).all() as { name: string }[];
 
       const tableNames = tables.map((t) => t.name);
       assert.ok(tableNames.includes("clients"));
