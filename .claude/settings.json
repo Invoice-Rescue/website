@@ -157,15 +157,8 @@
       }
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "node .claude/helpers/statusline.cjs"
-  },
   "permissions": {
-    "allow": [
-      "mcp__claude-flow__*",
-      "Bash(wrangler deploy --dry-run*)"
-    ],
+    "allow": ["mcp__claude-flow__*", "Bash(wrangler deploy --dry-run*)"],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
@@ -243,11 +236,7 @@
     },
     "daemon": {
       "autoStart": true,
-      "workers": [
-        "map",
-        "audit",
-        "optimize"
-      ],
+      "workers": ["map", "audit", "optimize"],
       "schedules": {
         "audit": {
           "interval": "4h",
@@ -262,11 +251,7 @@
     "learning": {
       "enabled": true,
       "autoTrain": true,
-      "patterns": [
-        "coordination",
-        "optimization",
-        "prediction"
-      ],
+      "patterns": ["coordination", "optimization", "prediction"],
       "retention": {
         "shortTerm": "24h",
         "longTerm": "30d"

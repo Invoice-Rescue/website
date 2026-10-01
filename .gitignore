@@ -43,3 +43,16 @@ backend/src/**/*.js
 backend/src/**/*.d.ts
 tests/**/*.js
 tests/**/*.d.ts
+
+# Clean Code Standards (Secrets & Artifacts)
+.env*.local
+dist/
+build/
+.next/
+coverage/
+.turbo/
+
+# Test run output — regenerated on every run, never source
+playwright-report/
+playwright-results.json
+test-results/
