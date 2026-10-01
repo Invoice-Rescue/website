@@ -18,12 +18,14 @@
     "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix",
+    "lint:md": "markdownlint-cli2 \"**/*.md\"",
+    "lint:md:fix": "markdownlint-cli2 --fix \"**/*.md\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "test": "npx tsx --test tests/**/*.test.ts",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
     "e2e": "npx playwright test",
     "db:seed": "tsx scripts/seed-local-db.ts",
-    "verify": "npm run lint && npm run test && npm run build",
+    "verify": "npm run lint:md && npm run typecheck && npm run test && npm run build",
     "prepare": "husky"
   },
   "repository": {
@@ -45,9 +47,6 @@
     "@types/node": "^26.1.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-tailwindcss": "^4.4.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.12.0",
     "husky": "^9.1.7",
@@ -55,11 +54,10 @@
     "lint-staged": "^17.5.1",
     "markdownlint-cli2": "^0.23.2",
     "prettier": "^3.9.7",
-    "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
-    "wrangler": "^4.126.0"
+    "wrangler": "^4.145.0"
   },
   "overrides": {
     "smol-toml": "^1.7.1"

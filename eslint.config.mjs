@@ -1,9 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import reactPlugin from 'eslint-plugin-react';
-import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import unusedImports from 'eslint-plugin-unused-imports';
-import tailwind from 'eslint-plugin-tailwindcss';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
 
@@ -33,6 +30,7 @@ export default tseslint.config(
       '.swarm/**',
       'playwright-report/**',
       'test-results/**',
+      'graphify-out/**',
       'worker-configuration.d.ts',
     ],
   },
@@ -74,15 +72,12 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    // No React/Tailwind in this repo (vanilla Worker + static HTML), so those
+    // plugins were dropped — they also pinned eslint <10 and blocked npm audit fixes.
     plugins: {
-      react: reactPlugin,
-      'react-hooks': reactHooksPlugin,
       'unused-imports': unusedImports,
     },
     rules: {
-      ...reactHooksPlugin.configs.recommended.rules,
-      'react/react-in-jsx-scope': 'off',
-
       // Catch unhandled async promises (prevents silent agent runtime failures)
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/await-thenable': 'warn',
@@ -118,33 +113,6 @@ export default tseslint.config(
   {
     files: ['**/*.{js,mjs,cjs}'],
     ...tseslint.configs.disableTypeChecked,
-  },
-
-  // Spread Tailwind flat config presets
-  ...[tailwind.configs['flat/recommended'] || tailwind.configs.recommended],
-
-  {
-    files: ['**/*.{jsx,tsx}'],
-    settings: {
-      tailwindcss: {
-        // Enforce sorting inside class merge utilities like clsx, cva, and cn
-        callees: ['classnames', 'clsx', 'ctl', 'cva', 'cn', 'twMerge'],
-        config: 'tailwind.config.js',
-      },
-    },
-    rules: {
-      // Auto-fixes class ordering on save / --fix
-      'tailwindcss/classnames-order': 'warn',
-
-      // Warns against non-existent Tailwind classes or typos
-      'tailwindcss/no-custom-classname': 'warn',
-
-      // Recommends shorthand alternatives (e.g., px-2 py-2 -> p-2)
-      'tailwindcss/enforces-shorthand': 'warn',
-
-      // Warns on conflicting declarations (e.g., p-2 p-4)
-      'tailwindcss/no-contradicting-classname': 'warn',
-    },
   },
 
   prettierConfig // Must stay last to deactivate conflicting stylistic rules

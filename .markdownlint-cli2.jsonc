@@ -27,6 +27,10 @@
     ".claude-flow/**",
     ".swarm/**",
     ".vscode/**",
-    "docs/generated/**"
+    "docs/generated/**",
+    // Generated output (gitignored) — linting it locally made `verify` fail on files CI never sees
+    "graphify-out/**",
+    "playwright-report/**",
+    "test-results/**"
   ]
 }

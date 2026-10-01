@@ -42,7 +42,26 @@ jobs:
       - name: Run automated test suite
         run: npm test
 
+      # E2E boots `wrangler dev` against a local D1. CI has no .dev.vars and no
+      # migrated local DB, so build both here. Values are throwaway, per-run, and
+      # never touch the real Worker — playwright.config.ts refuses to load without
+      # ADMIN_SECRET, which is why every E2E run failed before this step existed.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare local Worker env for E2E
+        run: |
+          {
+            echo "ADMIN_SECRET=ci-admin-${{ github.run_id }}"
+            echo "PORTAL_SESSION_SECRET=ci-portal-${{ github.run_id }}"
+            echo "TOKEN_ENCRYPTION_SECRET=ci-token-${{ github.run_id }}"
+            echo "STRIPE_WEBHOOK_SECRET=whsec_ci_dummy"
+          } > .dev.vars
+          npx wrangler d1 migrations apply invoice-rescue-db --local
+
       - name: Run E2E test suite
+        env:
+          ADMIN_SECRET: ci-admin-${{ github.run_id }}
         run: npm run e2e
 
       - name: Verify Cloudflare Worker bundling
