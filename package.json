@@ -14,7 +14,7 @@
     "deploy": "wrangler deploy",
     "deps:check": "npm outdated",
     "deps:update": "npm update && npm run typecheck && npm run build",
-    "deps:audit": "npm audit",
+    "deps:audit": "npm audit --omit=dev",
     "git:repair": "powershell -ExecutionPolicy Bypass -File scripts/git-repair-index.ps1",
     "lint": "eslint . --cache",
     "lint:ci": "eslint . --quiet",

@@ -35,5 +35,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run npm audit check
+      # Gate on shipped (production) dependencies only; the Worker has none today.
+      # Dev-only advisories with no upstream fix (e.g. GHSA-vfj7-8cjw-p6xm in
+      # braces, reached via markdownlint-cli2) would otherwise block every PR.
+      - name: Run npm audit check (production dependencies)
         run: npm run deps:audit
+
+      # Keep dev-tooling advisories visible without blocking. Revisit when braces is patched.
+      - name: Report dev-dependency advisories (non-blocking)
+        run: npm audit || true
