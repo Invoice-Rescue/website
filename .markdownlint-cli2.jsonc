@@ -23,6 +23,8 @@
     ".wrangler/**",
     ".git/**",
     ".agents/**",
+    // Agent personas installed by the Agency Agents app — vendored third-party content
+    ".github/agents/**",
     ".claude/**",
     ".claude-flow/**",
     ".swarm/**",
@@ -30,6 +32,7 @@
     "docs/generated/**",
     // Generated output (gitignored) — linting it locally made `verify` fail on files CI never sees
     "graphify-out/**",
+    "graft/**",
     "playwright-report/**",
     "test-results/**"
   ]
