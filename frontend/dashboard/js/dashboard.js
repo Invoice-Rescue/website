@@ -1,7 +1,7 @@
 /**
  * Invoice Rescue — Dashboard, Debtor Ledger & Approval Queue Engine
  * Handles REST API communication, client-side filtering/sorting, statutory interest
- * calculations, and graceful static preview fallback.
+ * calculations, and explicit error states when the API is unavailable (no demo data).
  */
 
 (function () {
@@ -11,305 +11,7 @@
   let boeBaseRatePercent = 3.75;
   const STATUTORY_MARGIN_PERCENT = 8;
 
-  // Session Storage keys for mock persistence across page navigations
-  const STORAGE_KEY_INVOICES = "ir_dashboard_invoices";
-  const STORAGE_KEY_DRAFTS = "ir_dashboard_drafts";
-  const STORAGE_KEY_ACTIVITIES = "ir_dashboard_activities";
   const STORAGE_KEY_THEME = "invoice_rescue_theme";
-
-  // Default Mock Datasets
-  const DEFAULT_INVOICES = [
-    {
-      id: 1,
-      invoice_number: "INV-2026-089",
-      debtor_name: "Hartley & Co Ltd",
-      debtor_email: "accounts@hartleyandco.co.uk",
-      amount_pence: 485000,
-      currency: "GBP",
-      due_date: "2026-08-23",
-      days_overdue: 24,
-      stage: 4,
-      stage_label: "Stage 4 (Final)",
-      status: "overdue",
-      last_contact: "2 days ago (Formal Notice)"
-    },
-    {
-      id: 2,
-      invoice_number: "INV-2026-104",
-      debtor_name: "Meridian Build Partners",
-      debtor_email: "finance@meridianbuild.co.uk",
-      amount_pence: 1230000,
-      currency: "GBP",
-      due_date: "2026-08-29",
-      days_overdue: 18,
-      stage: 3,
-      stage_label: "Stage 3 (Firm)",
-      status: "overdue",
-      last_contact: "4 days ago (Step 2 Follow-up)"
-    },
-    {
-      id: 3,
-      invoice_number: "INV-2026-072",
-      debtor_name: "Foxglove Creative Studio",
-      debtor_email: "billing@foxglovestudio.com",
-      amount_pence: 215000,
-      currency: "GBP",
-      due_date: "2026-09-05",
-      days_overdue: 11,
-      stage: 2,
-      stage_label: "Stage 2 (Follow-up)",
-      status: "paid",
-      last_contact: "Yesterday (Settled in full)"
-    },
-    {
-      id: 4,
-      invoice_number: "INV-2026-112",
-      debtor_name: "Vantage Architecture",
-      debtor_email: "invoices@vantagearch.co.uk",
-      amount_pence: 640000,
-      currency: "GBP",
-      due_date: "2026-09-07",
-      days_overdue: 9,
-      stage: 2,
-      stage_label: "Stage 2 (Follow-up)",
-      status: "overdue",
-      last_contact: "3 days ago (Polite Reminder)"
-    },
-    {
-      id: 5,
-      invoice_number: "INV-2026-121",
-      debtor_name: "Kestrel Logistics UK",
-      debtor_email: "ap@kestrellogistics.co.uk",
-      amount_pence: 375000,
-      currency: "GBP",
-      due_date: "2026-09-11",
-      days_overdue: 5,
-      stage: 1,
-      stage_label: "Stage 1 (Gentle)",
-      status: "overdue",
-      last_contact: "5 days ago (Initial dispatch)"
-    },
-    {
-      id: 6,
-      invoice_number: "INV-2026-095",
-      debtor_name: "Blackwood Digital Media",
-      debtor_email: "finance@blackwooddigital.co.uk",
-      amount_pence: 890000,
-      currency: "GBP",
-      due_date: "2026-08-31",
-      days_overdue: 16,
-      stage: 3,
-      stage_label: "Stage 3 (Firm)",
-      status: "promised",
-      last_contact: "2 days ago (Promise to pay Fri)"
-    },
-    {
-      id: 7,
-      invoice_number: "INV-2026-118",
-      debtor_name: "Crestview Engineering Ltd",
-      debtor_email: "accounts@crestview-eng.co.uk",
-      amount_pence: 1520000,
-      currency: "GBP",
-      due_date: "2026-08-16",
-      days_overdue: 31,
-      stage: 4,
-      stage_label: "Stage 4 (Final)",
-      status: "overdue",
-      last_contact: "1 day ago (Notice of Legal Claim)"
-    },
-    {
-      id: 8,
-      invoice_number: "INV-2026-130",
-      debtor_name: "Solent Media Group",
-      debtor_email: "pay@solentmediagroup.com",
-      amount_pence: 185000,
-      currency: "GBP",
-      due_date: "2026-09-13",
-      days_overdue: 3,
-      stage: 1,
-      stage_label: "Stage 1 (Gentle)",
-      status: "overdue",
-      last_contact: "3 days ago (Initial dispatch)"
-    },
-    {
-      id: 9,
-      invoice_number: "INV-2026-088",
-      debtor_name: "Northstar Consulting",
-      debtor_email: "ap@northstarconsulting.co.uk",
-      amount_pence: 520000,
-      currency: "GBP",
-      due_date: "2026-09-02",
-      days_overdue: 14,
-      stage: 2,
-      stage_label: "Stage 2 (Follow-up)",
-      status: "disputed",
-      last_contact: "4 days ago (Query on PO match)"
-    },
-    {
-      id: 10,
-      invoice_number: "INV-2026-102",
-      debtor_name: "Amberley Retail Design",
-      debtor_email: "accounts@amberleydesign.co.uk",
-      amount_pence: 710000,
-      currency: "GBP",
-      due_date: "2026-09-04",
-      days_overdue: 12,
-      stage: 2,
-      stage_label: "Stage 2 (Follow-up)",
-      status: "paid",
-      last_contact: "2 days ago (Settled via BACS)"
-    },
-    {
-      id: 11,
-      invoice_number: "INV-2026-135",
-      debtor_name: "Halcyon Brand Works",
-      debtor_email: "hello@halcyonbrandworks.co.uk",
-      amount_pence: 95000,
-      currency: "GBP",
-      due_date: "2026-09-10",
-      days_overdue: 6,
-      stage: 1,
-      stage_label: "Stage 1 (Gentle)",
-      status: "overdue",
-      last_contact: "6 days ago (Initial dispatch)"
-    },
-    {
-      id: 12,
-      invoice_number: "INV-2026-110",
-      debtor_name: "Zenith Property Dev",
-      debtor_email: "finance@zenithproperty.co.uk",
-      amount_pence: 1150000,
-      currency: "GBP",
-      due_date: "2026-08-25",
-      days_overdue: 22,
-      stage: 4,
-      stage_label: "Stage 4 (Final)",
-      status: "overdue",
-      last_contact: "3 days ago (Final statutory claim)"
-    }
-  ];
-
-  const DEFAULT_DRAFTS = [
-    {
-      id: 101,
-      invoice_id: 1,
-      invoice_number: "INV-2026-089",
-      debtor_name: "Hartley & Co Ltd",
-      debtor_email: "accounts@hartleyandco.co.uk",
-      company_name: "Apex Studio Ltd",
-      amount_pence: 485000,
-      currency: "GBP",
-      days_overdue: 24,
-      step: 4,
-      step_label: "Stage 4 (Final Notice)",
-      subject: "FINAL DEMAND — Overdue Invoice INV-2026-089 (Hartley & Co Ltd)",
-      body: `Dear Accounts Team,
-
-We write regarding outstanding invoice INV-2026-089 (£4,850.00), which matured on 23 August 2026 and is now 24 days overdue. Despite previous polite reminders, this sum remains unpaid on our ledger.
-
-Under the Late Payment of Commercial Debts (Interest) Act 1998, statutory interest of £37.47 (calculated at 11.75% per annum) and fixed compensation of £70.00 have now accrued and are formally added to your balance.
-
-The revised total payable is £4,957.47. Please arrange immediate settlement to our account within 48 hours to avoid formal escalation to legal proceedings and credit recovery.
-
-Yours sincerely,
-Tibor Rames
-Invoice Rescue — on behalf of Apex Studio Ltd`,
-      locked_sender: "hello@invoicerescue.co.uk"
-    },
-    {
-      id: 102,
-      invoice_id: 2,
-      invoice_number: "INV-2026-104",
-      debtor_name: "Meridian Build Partners",
-      debtor_email: "finance@meridianbuild.co.uk",
-      company_name: "Apex Studio Ltd",
-      amount_pence: 1230000,
-      currency: "GBP",
-      days_overdue: 18,
-      step: 3,
-      step_label: "Stage 3 (Firm Notice)",
-      subject: "OVERDUE PAYMENT — Invoice INV-2026-104 (£12,300.00)",
-      body: `Dear Meridian Build Finance Team,
-
-Invoice INV-2026-104 for £12,300.00 is now 18 days past its agreed due date of 29 August 2026.
-
-As a reminder, statutory interest of £71.27 and statutory recovery compensation of £100.00 apply to commercial debts over £10,000 under the Late Payment of Commercial Debts Regulations. The current outstanding total is £12,471.27.
-
-We request that you confirm payment scheduling by return or send remittance advice at your earliest convenience to maintain an uninterrupted working relationship.
-
-Kind regards,
-Tibor Rames
-Invoice Rescue — on behalf of Apex Studio Ltd`,
-      locked_sender: "hello@invoicerescue.co.uk"
-    },
-    {
-      id: 103,
-      invoice_id: 4,
-      invoice_number: "INV-2026-112",
-      debtor_name: "Vantage Architecture",
-      debtor_email: "invoices@vantagearch.co.uk",
-      company_name: "Apex Studio Ltd",
-      amount_pence: 640000,
-      currency: "GBP",
-      days_overdue: 9,
-      step: 2,
-      step_label: "Stage 2 (Follow-up)",
-      subject: "Follow-up: Overdue Invoice INV-2026-112",
-      body: `Hello Vantage Accounts,
-
-Just a quick follow-up regarding invoice INV-2026-112 (£6,400.00), which fell due on 07 September 2026.
-
-We appreciate that invoice cycles can sometimes be delayed, so please let us know if you require another copy of the invoice or if this is currently queued in your next payment run.
-
-Best regards,
-Tibor Rames
-Invoice Rescue — on behalf of Apex Studio Ltd`,
-      locked_sender: "hello@invoicerescue.co.uk"
-    }
-  ];
-
-  const DEFAULT_ACTIVITIES = [
-    {
-      id: "act-1",
-      type: "sent",
-      title: "Stage 2 Follow-up dispatched",
-      detail: "INV-2026-104 to Meridian Build Partners",
-      amount: "£12,300.00",
-      time: "Today, 08:30"
-    },
-    {
-      id: "act-2",
-      type: "paid",
-      title: "Invoice Settled in Full",
-      detail: "INV-2026-072 paid by Foxglove Creative Studio",
-      amount: "£2,150.00",
-      time: "Yesterday, 14:15"
-    },
-    {
-      id: "act-3",
-      type: "draft",
-      title: "3 AI escalation drafts generated",
-      detail: "Awaiting human operator review in queue",
-      amount: "£23,550.00",
-      time: "Yesterday, 06:00"
-    },
-    {
-      id: "act-4",
-      type: "paid",
-      title: "Payment cleared via BACS",
-      detail: "INV-2026-102 paid by Amberley Retail Design",
-      amount: "£7,100.00",
-      time: "14 Sep, 11:20"
-    },
-    {
-      id: "act-5",
-      type: "dispute",
-      detail: "INV-2026-088 query raised by Northstar Consulting",
-      title: "Debtor query flagged for review",
-      amount: "£5,200.00",
-      time: "12 Sep, 16:45"
-    }
-  ];
 
   // Helper: Currency Formatter
   function formatMoney(pence, currency = "GBP") {
@@ -327,63 +29,6 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
   function computeStatutoryInterestPence(amountPence, daysOverdue, baseRate = boeBaseRatePercent) {
     const annualRate = baseRate + STATUTORY_MARGIN_PERCENT;
     return Math.round(((amountPence * annualRate) / 100 / 365) * Math.max(0, daysOverdue));
-  }
-
-  // Load state from session or defaults
-  function getStoredInvoices() {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY_INVOICES);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.warn("Storage read error", e);
-    }
-    return DEFAULT_INVOICES;
-  }
-
-  function saveStoredInvoices(invoices) {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invoices));
-    } catch (e) {
-      console.warn("Storage save error", e);
-    }
-  }
-
-  function getStoredDrafts() {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY_DRAFTS);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.warn("Storage read error", e);
-    }
-    return DEFAULT_DRAFTS;
-  }
-
-  function saveStoredDrafts(drafts) {
-    try {
-      sessionStorage.setItem(STORAGE_KEY_DRAFTS, JSON.stringify(drafts));
-    } catch (e) {
-      console.warn("Storage save error", e);
-    }
-  }
-
-  function getStoredActivities() {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY_ACTIVITIES);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      console.warn("Storage read error", e);
-    }
-    return DEFAULT_ACTIVITIES;
-  }
-
-  function addActivity(item) {
-    const activities = getStoredActivities();
-    activities.unshift(item);
-    try {
-      sessionStorage.setItem(STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
-    } catch (e) {
-      console.warn("Storage save error", e);
-    }
   }
 
   // Toast Notification System
@@ -456,18 +101,9 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
 
   // Update Pending Drafts Badge Across All Pages
   async function updateNavDraftBadge() {
-    let drafts = getStoredDrafts();
-    try {
-      const res = await apiFetch("/api/admin/drafts");
-      if (res.ok && res.data?.drafts) {
-        drafts = res.data.drafts;
-        saveStoredDrafts(drafts);
-      }
-    } catch {
-      // Quiet fallback to session storage
-    }
-
-    const count = drafts.length;
+    // apiFetch never throws; a failed load hides the badge rather than inventing a count.
+    const res = await apiFetch("/api/admin/drafts");
+    const count = res.ok && Array.isArray(res.data?.drafts) ? res.data.drafts.length : 0;
     const badges = document.querySelectorAll(".nav-badge-drafts");
     badges.forEach((b) => {
       b.textContent = count;
@@ -486,12 +122,15 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
   // Unified API Fetch wrapper with resilient fallback
   async function apiFetch(endpoint, options = {}) {
     try {
+      // `headers` must come after `...options`: spreading options last replaced the merged headers,
+      // dropping Accept whenever a caller passed its own (e.g. Content-Type), so approve fell back to
+      // the HTML form flow (303 -> /admin -> 401) and reported a failure after the email had sent.
       const res = await fetch(endpoint, {
+        ...options,
         headers: {
           Accept: "application/json",
           ...(options.headers || {}),
         },
-        ...options,
       });
       let data = null;
       try {
@@ -528,6 +167,31 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
     }
   }
 
+  // One request per page load, shared by the header (every page) and the overview metrics.
+  let dashboardDataRequest = null;
+  function getDashboardData() {
+    if (!dashboardDataRequest) dashboardDataRequest = apiFetch("/api/portal/dashboard-data");
+    return dashboardDataRequest;
+  }
+
+  // Header identity: the logged-in client's own name/plan, or the neutral HTML default ("Your company") on failure.
+  async function renderClientIdentity() {
+    const res = await getDashboardData();
+    const d = res.ok && res.data ? res.data : null;
+    const companyName = d && (d.companyName || (d.client && d.client.company_name));
+    if (!companyName) return;
+    document.querySelectorAll(".client-name").forEach((el) => {
+      el.textContent = companyName;
+    });
+    const plan = d.plan || (d.client && d.client.plan);
+    if (plan) {
+      const planCap = plan.charAt(0).toUpperCase() + plan.slice(1);
+      document.querySelectorAll(".client-plan-label").forEach((el) => {
+        el.textContent = `${planCap} Plan · `;
+      });
+    }
+  }
+
   // ==========================================================================
   // 1. Client Dashboard Logic (`index.html`)
   // ==========================================================================
@@ -536,7 +200,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
     if (!metricsGrid) return;
 
     // 1. Attempt live API fetch
-    const apiRes = await apiFetch("/api/portal/dashboard-data");
+    const apiRes = await getDashboardData();
     if (apiRes.ok && apiRes.data) {
       const d = apiRes.data;
       const metrics = d.metrics || d.overdueTotals || {};
@@ -555,21 +219,6 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       if (elActive) elActive.textContent = formatMoney(activeChasingPence);
       if (elRecovered) elRecovered.textContent = formatMoney(recoveredMonthPence);
       if (elCount) elCount.textContent = `${overdueCount} Invoices`;
-
-      // /portal/dashboard-data returns companyName and plan as top-level fields.
-      const companyName = d.companyName || (d.client && d.client.company_name);
-      const plan = d.plan || (d.client && d.client.plan);
-      if (companyName) {
-        document.querySelectorAll(".client-name").forEach((el) => {
-          el.textContent = companyName;
-        });
-        if (plan) {
-          const planCap = plan.charAt(0).toUpperCase() + plan.slice(1);
-          document.querySelectorAll(".client-plan").forEach((el) => {
-            el.innerHTML = `${planCap} Plan · <a href="/portal/billing" style="color:var(--muted); text-decoration:underline;">Billing</a>`;
-          });
-        }
-      }
 
       // Aging breakdown
       const aging = d.agingBreakdown || {};
@@ -661,134 +310,18 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       return;
     }
 
-    // 2. Fallback to session / mock data
-    const invoices = getStoredInvoices();
-
-    // 1. Calculate Metrics
-    let totalOverduePence = 0;
-    let activeChasingPence = 0;
-    let recoveredMonthPence = 0;
-    let overdueCount = 0;
-
-    // Aging Buckets: 1-7d, 8-14d, 15-21d, 22d+
-    let b1Pence = 0, b1Count = 0; // 1-7d
-    let b2Pence = 0, b2Count = 0; // 8-14d
-    let b3Pence = 0, b3Count = 0; // 15-21d
-    let b4Pence = 0, b4Count = 0; // 22d+
-
-    invoices.forEach((inv) => {
-      if (inv.status === "paid") {
-        recoveredMonthPence += inv.amount_pence;
-      } else if (inv.status === "overdue" || inv.status === "disputed" || inv.status === "promised") {
-        totalOverduePence += inv.amount_pence;
-        overdueCount++;
-
-        if (inv.status !== "disputed") {
-          activeChasingPence += inv.amount_pence;
-        }
-
-        const days = inv.days_overdue;
-        if (days <= 7) {
-          b1Pence += inv.amount_pence;
-          b1Count++;
-        } else if (days <= 14) {
-          b2Pence += inv.amount_pence;
-          b2Count++;
-        } else if (days <= 21) {
-          b3Pence += inv.amount_pence;
-          b3Count++;
-        } else {
-          b4Pence += inv.amount_pence;
-          b4Count++;
-        }
-      }
+    // 2. Load failed: show an explicit error state, never sample figures that could pass for the client's own.
+    ["metric-total-overdue", "metric-active-chase", "metric-recovered-month", "metric-overdue-count"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = "—";
     });
-
-    // Populate Cards
-    const elTotal = document.getElementById("metric-total-overdue");
-    const elActive = document.getElementById("metric-active-chase");
-    const elRecovered = document.getElementById("metric-recovered-month");
-    const elCount = document.getElementById("metric-overdue-count");
-
-    if (elTotal) elTotal.textContent = formatMoney(totalOverduePence);
-    if (elActive) elActive.textContent = formatMoney(activeChasingPence);
-    if (elRecovered) elRecovered.textContent = formatMoney(recoveredMonthPence);
-    if (elCount) elCount.textContent = `${overdueCount} Invoices`;
-
-    // Populate Aging Buckets
-    const sumAging = b1Pence + b2Pence + b3Pence + b4Pence || 1;
-    const p1 = Math.round((b1Pence / sumAging) * 100);
-    const p2 = Math.round((b2Pence / sumAging) * 100);
-    const p3 = Math.round((b3Pence / sumAging) * 100);
-    const p4 = 100 - (p1 + p2 + p3);
-
-    const seg1 = document.getElementById("gauge-seg-1");
-    const seg2 = document.getElementById("gauge-seg-2");
-    const seg3 = document.getElementById("gauge-seg-3");
-    const seg4 = document.getElementById("gauge-seg-4");
-
-    if (seg1) { seg1.style.width = `${p1}%`; seg1.title = `1-7d: ${p1}%`; }
-    if (seg2) { seg2.style.width = `${p2}%`; seg2.title = `8-14d: ${p2}%`; }
-    if (seg3) { seg3.style.width = `${p3}%`; seg3.title = `15-21d: ${p3}%`; }
-    if (seg4) { seg4.style.width = `${p4}%`; seg4.title = `22d+: ${p4}%`; }
-
-    // Dynamic aria-valuetext on .aging-gauge (WCAG 2.2 AA)
-    const gauge = document.querySelector(".aging-gauge");
-    if (gauge) {
-      gauge.setAttribute("aria-valuetext", `Stage 1: ${p1}%, Stage 2: ${p2}%, Stage 3: ${p3}%, Stage 4: ${p4}%`);
-    }
-
-    // Text figures for aging buckets
-    const elB1Amt = document.getElementById("b1-amount");
-    const elB1Cnt = document.getElementById("b1-count");
-    const elB2Amt = document.getElementById("b2-amount");
-    const elB2Cnt = document.getElementById("b2-count");
-    const elB3Amt = document.getElementById("b3-amount");
-    const elB3Cnt = document.getElementById("b3-count");
-    const elB4Amt = document.getElementById("b4-amount");
-    const elB4Cnt = document.getElementById("b4-count");
-
-    if (elB1Amt) elB1Amt.textContent = formatMoney(b1Pence);
-    if (elB1Cnt) elB1Cnt.textContent = `${b1Count} overdue`;
-    if (elB2Amt) elB2Amt.textContent = formatMoney(b2Pence);
-    if (elB2Cnt) elB2Cnt.textContent = `${b2Count} overdue`;
-    if (elB3Amt) elB3Amt.textContent = formatMoney(b3Pence);
-    if (elB3Cnt) elB3Cnt.textContent = `${b3Count} overdue`;
-    if (elB4Amt) elB4Amt.textContent = formatMoney(b4Pence);
-    if (elB4Cnt) elB4Cnt.textContent = `${b4Count} overdue`;
-
-    // Render Recent Activity Feed
     const activityFeed = document.getElementById("activity-feed-list");
     if (activityFeed) {
-      const activities = getStoredActivities();
-      activityFeed.innerHTML = activities
-        .map(
-          (act) => `
-          <div class="activity-item">
-            <div class="activity-icon-wrap ${escapeHtml(act.type)}" aria-hidden="true">
-              ${
-                act.type === "paid"
-                  ? "✓"
-                  : act.type === "sent"
-                  ? "✉"
-                  : act.type === "draft"
-                  ? "⚡"
-                  : "!"
-              }
-            </div>
-            <div class="activity-body">
-              <div class="activity-line"><strong>${escapeHtml(act.title)}</strong></div>
-              <div class="activity-meta">
-                <span>${escapeHtml(act.detail)}</span>
-                <span>·</span>
-                <span>${escapeHtml(act.time)}</span>
-              </div>
-            </div>
-            <div class="activity-amount">${escapeHtml(act.amount)}</div>
-          </div>
-        `
-        )
-        .join("");
+      activityFeed.innerHTML = `
+        <div class="activity-item activity-empty" role="alert" style="color:var(--ink-muted);justify-content:center;padding:1.5rem 0;">
+          We couldn't load your dashboard data. Please refresh, or <a href="/portal">log in again</a>.
+        </div>
+      `;
     }
   }
 
@@ -799,18 +332,21 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
     const tableBody = document.getElementById("debtor-table-body");
     if (!tableBody) return;
 
-    let invoices = getStoredInvoices();
-
-    // Try live API fetch
-    try {
-      const apiRes = await apiFetch("/api/portal/debtors?limit=100");
-      if (apiRes.ok && apiRes.data?.debtors && apiRes.data.debtors.length > 0) {
-        invoices = apiRes.data.debtors;
-        saveStoredInvoices(invoices);
-      }
-    } catch {
-      // Fallback to stored invoices
+    const apiRes = await apiFetch("/api/portal/debtors?limit=100");
+    if (!apiRes.ok || !Array.isArray(apiRes.data?.debtors)) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="8">
+            <div class="empty-state" role="alert">
+              <h3 class="empty-state-title">We couldn't load your debtor ledger</h3>
+              <p>Please refresh the page, or <a href="/portal">log in again</a>.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
     }
+    const invoices = apiRes.data.debtors;
 
     let currentFilterStage = "all";
     let currentFilterStatus = "all";
@@ -1072,19 +608,21 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
     const queueList = document.getElementById("approval-queue-list");
     if (!queueList) return;
 
-    let drafts = getStoredDrafts();
     const countDisplay = document.getElementById("queue-count-display");
 
-    // Try live API fetch first
-    try {
-      const apiRes = await apiFetch("/api/admin/drafts");
-      if (apiRes.ok && apiRes.data?.drafts) {
-        drafts = apiRes.data.drafts;
-        saveStoredDrafts(drafts);
-      }
-    } catch {
-      // Fallback to session drafts
+    const apiRes = await apiFetch("/api/admin/drafts");
+    if (!apiRes.ok || !Array.isArray(apiRes.data?.drafts)) {
+      queueList.innerHTML = `
+        <div class="panel">
+          <div class="empty-state" role="alert">
+            <h3 class="empty-state-title">We couldn't load your review queue</h3>
+            <p>Please refresh the page, or <a href="/portal">log in again</a>.</p>
+          </div>
+        </div>
+      `;
+      return;
     }
+    let drafts = apiRes.data.drafts;
 
     function renderQueue() {
       if (countDisplay) {
@@ -1191,8 +729,8 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
                 </div>
 
                 <div class="human-signoff-stamp">
-                  <span class="stamp-badge">Operator Sign-Off</span>
-                  <span>Drafted by AI, verified by <strong>Tibor Rames</strong> on behalf of ${escapeHtml(draft.company_name)}.</span>
+                  <span class="stamp-badge">Human Sign-Off</span>
+                  <span>Drafted by AI on behalf of ${escapeHtml(draft.company_name)}. Nothing is sent until a person approves it.</span>
                 </div>
               </div>
             </div>
@@ -1265,18 +803,17 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
 
       const draft = drafts.find((d) => d.id === id);
       if (draft) {
-        try {
-          await apiFetch(`/api/admin/drafts/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ body: newContent }),
-          });
-        } catch {
-          // Keep local fallback
+        const res = await apiFetch(`/api/admin/drafts/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: newContent }),
+        });
+        if (!res.ok) {
+          showToast(res.data?.error || `Couldn't save the edit (${res.status || "network error"})`, "error");
+          return;
         }
 
         draft.body = newContent;
-        saveStoredDrafts(drafts);
         bodyText.textContent = newContent;
         window.InvoiceRescue.toggleEdit(id);
         if (toggleBtn) toggleBtn.focus(); // WCAG 2.2 AA: Focus restoration
@@ -1294,59 +831,33 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
         btn.innerHTML = `<span class="spinner" aria-hidden="true">⏳</span> Sending...`;
       }
 
-      // Try actual REST call: live /api/admin/drafts/:id/approve with fallback to /api/chase/:id/approve
-      let res = null;
-      try {
-        res = await apiFetch(`/api/admin/drafts/${id}/approve`, {
+      // Live /api/admin/drafts/:id/approve, falling back to the legacy /api/chase/:id/approve route on 404.
+      let res = await apiFetch(`/api/admin/drafts/${id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: draft.body }),
+      });
+      if (!res.ok && res.status === 404) {
+        const formData = new URLSearchParams();
+        formData.append("body", draft.body);
+        res = await apiFetch(`/api/chase/${id}/approve`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: draft.body }),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
         });
-
-        if (!res.ok && res.status === 404) {
-          const formData = new URLSearchParams();
-          formData.append("body", draft.body);
-          res = await apiFetch(`/api/chase/${id}/approve`, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData.toString(),
-          });
-        }
-      } catch (err) {
-        console.warn("Backend call bypassed or offline, updating local queue state:", err);
       }
 
-      if (res && !res.ok && res.status !== 404) {
+      // Only drop the card once the server confirms the send.
+      if (!res.ok) {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = "Approve & Send";
+          btn.innerHTML = "Approve &amp; Send";
         }
-        showToast(res.data?.error || "Failed to approve draft: " + res.status, "error");
+        showToast(res.data?.error || `Failed to approve draft (${res.status || "network error"})`, "error");
         return;
       }
 
-      // Remove from drafts list
       drafts = drafts.filter((d) => d.id !== id);
-      saveStoredDrafts(drafts);
-
-      // Record in recent activity
-      addActivity({
-        id: `act-${Date.now()}`,
-        type: "sent",
-        title: `Stage ${draft.step} dispatched`,
-        detail: `${draft.invoice_number} sent to ${draft.debtor_name}`,
-        amount: formatMoney(draft.amount_pence, draft.currency),
-        time: "Just now",
-      });
-
-      // Update corresponding invoice status
-      const invoices = getStoredInvoices();
-      const matchInv = invoices.find((i) => i.id === draft.invoice_id);
-      if (matchInv) {
-        matchInv.last_contact = "Just now (Sent)";
-        saveStoredInvoices(invoices);
-      }
-
       showToast(`Approved and dispatched chase message for ${draft.debtor_name}`);
       renderQueue();
     };
@@ -1355,19 +866,16 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
       const draft = drafts.find((d) => d.id === id);
       if (!draft) return;
 
-      try {
-        let res = await apiFetch(`/api/admin/drafts/${id}/skip`, {
-          method: "POST",
-        });
-        if (!res.ok && res.status === 404) {
-          await apiFetch(`/api/chase/${id}/skip`, { method: "POST" });
-        }
-      } catch {
-        // Offline / mock fallback
+      let res = await apiFetch(`/api/admin/drafts/${id}/skip`, { method: "POST" });
+      if (!res.ok && res.status === 404) {
+        res = await apiFetch(`/api/chase/${id}/skip`, { method: "POST" });
+      }
+      if (!res.ok) {
+        showToast(res.data?.error || `Failed to skip draft (${res.status || "network error"})`, "error");
+        return;
       }
 
       drafts = drafts.filter((d) => d.id !== id);
-      saveStoredDrafts(drafts);
       showToast(`Draft for ${draft.invoice_number} skipped`, "danger");
       renderQueue();
     };
@@ -1380,6 +888,7 @@ Invoice Rescue — on behalf of Apex Studio Ltd`,
   // ==========================================================================
   document.addEventListener("DOMContentLoaded", async () => {
     initTheme();
+    await renderClientIdentity();
     await fetchStatutoryRate();
     await updateNavDraftBadge();
     await initOverviewDashboard();

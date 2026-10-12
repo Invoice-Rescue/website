@@ -36,7 +36,7 @@
           <a href="approval-queue.html" class="nav-link">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             Approval Queue
-            <span class="nav-badge nav-badge-drafts" aria-label="Drafts awaiting review">3</span>
+            <span class="nav-badge nav-badge-drafts" aria-label="Drafts awaiting review">0</span>
           </a>
         </nav>
 
@@ -46,8 +46,8 @@
           </button>
 
           <div class="client-meta">
-            <div class="client-name">Apex Studio Ltd</div>
-            <div class="client-plan">Engine Plan · <a href="/portal/billing" style="color:var(--muted); text-decoration:underline;">Billing</a></div>
+            <div class="client-name">Your company</div>
+            <div class="client-plan"><span class="client-plan-label"></span><form method="post" action="/portal/billing" style="display:inline; margin:0;"><button type="submit" style="background:none; border:0; padding:0; font:inherit; color:var(--muted); text-decoration:underline; cursor:pointer;">Billing</button></form></div>
           </div>
         </div>
       </div>
@@ -60,7 +60,7 @@
       <div class="alert-banner-inner">
         <div class="alert-content">
           <span class="alert-icon" aria-hidden="true">⚡</span>
-          <span>You have <strong><span class="pending-draft-count">3</span> chase draft(s)</strong> awaiting human verification before dispatch.</span>
+          <span>You have <strong><span class="pending-draft-count">0</span> chase draft(s)</strong> awaiting human verification before dispatch.</span>
         </div>
         <a href="approval-queue.html" class="alert-action">
           Open Approval Queue &rarr;
@@ -99,7 +99,7 @@
             <span class="metric-label">Total Overdue Debt</span>
             <div class="metric-icon-wrap" aria-hidden="true">£</div>
           </div>
-          <div class="metric-value" id="metric-total-overdue">£0.00</div>
+          <div class="metric-value" id="metric-total-overdue">—</div>
           <div class="metric-subtext">
             <span>Cumulative aged ledger balance</span>
           </div>
@@ -111,7 +111,7 @@
             <span class="metric-label">Active In Chasing</span>
             <div class="metric-icon-wrap" aria-hidden="true">↗</div>
           </div>
-          <div class="metric-value" id="metric-active-chase">£0.00</div>
+          <div class="metric-value" id="metric-active-chase">—</div>
           <div class="metric-subtext">
             <span>In Stages 1 to 4 escalation sequences</span>
           </div>
@@ -123,10 +123,9 @@
             <span class="metric-label">Recovered This Month</span>
             <div class="metric-icon-wrap" aria-hidden="true">✓</div>
           </div>
-          <div class="metric-value" id="metric-recovered-month">£0.00</div>
+          <div class="metric-value" id="metric-recovered-month">—</div>
           <div class="metric-subtext">
-            <span class="trend-up">&uarr; £9,250.00</span>
-            <span>vs preceding 30 days</span>
+            <span>Settled invoices this month</span>
           </div>
         </div>
 
@@ -136,7 +135,7 @@
             <span class="metric-label">Open Overdue Invoices</span>
             <div class="metric-icon-wrap" aria-hidden="true">#</div>
           </div>
-          <div class="metric-value" id="metric-overdue-count">0 Invoices</div>
+          <div class="metric-value" id="metric-overdue-count">—</div>
           <div class="metric-subtext">
             <span>Average recovery turnaround: 14 days</span>
           </div>
@@ -183,8 +182,8 @@
                 </div>
               </div>
               <div class="bucket-figures">
-                <div class="bucket-amount" id="b1-amount">£0.00</div>
-                <div class="bucket-count" id="b1-count">0 overdue</div>
+                <div class="bucket-amount" id="b1-amount">—</div>
+                <div class="bucket-count" id="b1-count">Loading…</div>
               </div>
             </div>
 
@@ -198,8 +197,8 @@
                 </div>
               </div>
               <div class="bucket-figures">
-                <div class="bucket-amount" id="b2-amount">£0.00</div>
-                <div class="bucket-count" id="b2-count">0 overdue</div>
+                <div class="bucket-amount" id="b2-amount">—</div>
+                <div class="bucket-count" id="b2-count">Loading…</div>
               </div>
             </div>
 
@@ -213,8 +212,8 @@
                 </div>
               </div>
               <div class="bucket-figures">
-                <div class="bucket-amount" id="b3-amount">£0.00</div>
-                <div class="bucket-count" id="b3-count">0 overdue</div>
+                <div class="bucket-amount" id="b3-amount">—</div>
+                <div class="bucket-count" id="b3-count">Loading…</div>
               </div>
             </div>
 
@@ -228,8 +227,8 @@
                 </div>
               </div>
               <div class="bucket-figures">
-                <div class="bucket-amount" id="b4-amount">£0.00</div>
-                <div class="bucket-count" id="b4-count">0 overdue</div>
+                <div class="bucket-amount" id="b4-amount">—</div>
+                <div class="bucket-count" id="b4-count">Loading…</div>
               </div>
             </div>
           </div>
