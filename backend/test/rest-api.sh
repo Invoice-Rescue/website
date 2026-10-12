@@ -64,6 +64,10 @@ res=$(curl -s -X POST "$BASE_URL/portal/login" -H "Content-Type: application/x-w
 check "login request never leaks whether the email matched" "Check your email" "$res"
 
 res=$(curl -s "$BASE_URL/portal/verify?token=not-a-real-token")
+check "verify GET only renders a confirm form (scanner-safe)" 'action="/portal/verify"' "$res"
+
+res=$(curl -s -X POST "$BASE_URL/portal/verify" -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "token=not-a-real-token")
 check "garbage verify token rejected" "invalid or has expired" "$res"
 
 res=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/portal/dashboard")
@@ -101,7 +105,7 @@ echo "  curl -u admin:\$ADMIN_SECRET $BASE_URL/admin"
 echo "  curl -u admin:\$ADMIN_SECRET -X POST $BASE_URL/api/chase/1/approve -H 'Accept: application/json'"
 echo "  curl \"$BASE_URL/cdn-cgi/handler/scheduled?cron=0+8+*+*+FRI\" # friday-report"
 echo
-echo "The magic-link login itself (POST /portal/login → email → GET /portal/verify?token=...) can't"
+echo "The magic-link login itself (POST /portal/login → email → GET /portal/verify?token=... → Continue) can't"
 echo "be scripted here since it requires reading the emailed link; walk through it by hand in a browser"
 echo "against a seeded client, then confirm /portal/dashboard shows its invoices and /portal/billing"
 echo "redirects to Stripe (needs clients.stripe_customer_id set, which POST /api/clients now does"

@@ -680,7 +680,7 @@ describe('Milestone M3: Portal Dashboard, Debtor Ledger & Review Queue Endpoints
       assert.ok(row.reviewed_at !== null);
     });
 
-    test('5.2 Idempotent skip on already skipped draft returns 200', async () => {
+    test('5.2 Skip on already skipped draft returns 409 (already reviewed)', async () => {
       const { env, db } = createTestEnv();
       await db.rawSqlite.exec(`
         INSERT INTO clients (id, company_name, contact_email) VALUES (1, 'C1', 'c1@test.com');
@@ -697,7 +697,7 @@ describe('Milestone M3: Portal Dashboard, Debtor Ledger & Review Queue Endpoints
         },
       });
       const res = await worker.fetch(req, env);
-      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.status, 409);
     });
 
     test('5.3 Returns 404 when draft ID does not exist', async () => {

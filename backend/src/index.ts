@@ -13,10 +13,11 @@
  *   POST /api/billing/webhook                  → Stripe webhook (subscription status → client status)
  *   GET  /portal                               → client login form
  *   POST /portal/login                         → email a 15-min magic link [client]
- *   GET  /portal/verify                        → exchange magic link for a 7-day session cookie [client]
+ *   GET  /portal/verify                        → confirm page for a magic link (scanner-safe; no side effects)
+ *   POST /portal/verify                        → consume a single-use magic link for a 7-day session cookie [client]
  *   GET  /portal/dashboard                     → client's own invoices + chase history w/ review audit trail [client]
  *   POST /portal/billing                       → redirect to Stripe-hosted billing portal [client]
- *   POST /portal/logout                        → clear session cookie [client]
+ *   POST /portal/logout                        → clear session cookie + revoke all of the client's sessions [client]
  *   GET  /dashboard/*                          → authenticated client portal (debtors, approval queue, analytics) [client/admin]
  *
  * [admin] routes require HTTP Basic Auth — any username, password = ADMIN_SECRET.
@@ -64,15 +65,24 @@ import { runOverdueDetection } from './lib/chase-runner';
 import { renderReviewQueue, type DraftRow } from './lib/admin';
 import {
   signLoginToken,
-  verifyLoginToken,
+  consumeLoginToken,
   buildSessionCookie,
   clearSessionCookie,
   authenticateClient,
+  readSessionEpoch,
+  revokeClientSessions,
 } from './lib/portal-auth';
-import { createCustomer, createBillingPortalSession, verifyWebhookSignature } from './lib/stripe';
+import { consumeRateLimit, clientAddress, type RateLimitRule } from './lib/rate-limit';
+import {
+  createCustomer,
+  createBillingPortalSession,
+  verifyWebhookSignature,
+  parseWebhookEvent,
+} from './lib/stripe';
 import {
   renderPortalLogin,
   renderPortalLoginSent,
+  renderPortalVerifyConfirm,
   renderPortalDashboard,
   type PortalClientRow,
   type PortalInvoiceRow,
@@ -97,8 +107,10 @@ import {
   recordAccountingWebhook,
   resolveClientByAccountingTenant,
   upsertTenantInvoice,
+  InvalidInvoiceDataError,
 } from './lib/tenant-repo';
 import {
+  SECURITY_HEADERS,
   handlePortalDashboardData,
   handlePortalDebtors,
   handleGetDrafts,
@@ -142,12 +154,106 @@ interface ClientInput {
   voice_notes: string;
 }
 
-const SECURITY_HEADERS: Record<string, string> = {
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-};
+/** Unauthenticated routes that each trigger a real email send — see lib/rate-limit.ts. */
+const PORTAL_LOGIN_PER_IP: RateLimitRule = { limit: 10, windowSeconds: 15 * 60 };
+const PORTAL_LOGIN_PER_EMAIL: RateLimitRule = { limit: 3, windowSeconds: 15 * 60 };
+const LEAD_PER_IP: RateLimitRule = { limit: 5, windowSeconds: 60 * 60 };
+
+/** CSV import ceiling: each row costs ~2 D1 queries and Workers cap queries per invocation. */
+const MAX_IMPORT_ROWS = 400;
+
+/** Server-to-server callbacks: no browser Origin, authenticated by their own signatures. */
+const CSRF_EXEMPT_PATHS = new Set([
+  '/api/billing/webhook',
+  '/api/webhooks/xero',
+  '/api/webhooks/quickbooks',
+]);
+
+/**
+ * CSRF guard for every state-changing request. Admin auth is HTTP Basic, which browsers re-attach
+ * to cross-site form posts (SameSite doesn't apply to it), so an attacker page could otherwise
+ * POST /api/chase/:id/approve through the operator's browser. Browsers always send Origin and/or
+ * Sec-Fetch-Site on cross-site POSTs; non-browser clients (curl, tests) send neither and pass.
+ */
+function rejectCrossSiteRequest(request: Request, url: URL): Response | null {
+  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
+    return null;
+  }
+  if (CSRF_EXEMPT_PATHS.has(url.pathname)) return null;
+
+  const origin = request.headers.get('Origin');
+  const fetchSite = request.headers.get('Sec-Fetch-Site');
+  const crossOrigin = origin !== null && origin !== 'null' && origin !== url.origin;
+  const opaqueOrigin = origin === 'null';
+  const crossSiteFetch = fetchSite === 'cross-site';
+  if (!crossOrigin && !opaqueOrigin && !crossSiteFetch) return null;
+
+  return new Response('Cross-site request rejected', { status: 403, headers: SECURITY_HEADERS });
+}
+
+/** Constant-time string comparison so the admin password check doesn't leak a timing oracle. */
+function constantTimeEquals(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  let diff = aBytes.length ^ bBytes.length;
+  for (let i = 0; i < Math.max(aBytes.length, bBytes.length); i++) {
+    diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+/** Extracts the password half of an HTTP Basic Authorization header; null if absent or malformed. */
+function readBasicAuthPassword(request: Request): string | null {
+  const match = request.headers.get('Authorization')?.match(/^Basic (.+)$/);
+  if (!match) return null;
+  let decoded: string;
+  try {
+    decoded = atob(match[1]);
+  } catch {
+    return null; // invalid base64 is just a failed login, not a server error
+  }
+  const colon = decoded.indexOf(':');
+  return colon === -1 ? null : decoded.slice(colon + 1);
+}
+
+/** Collapses CR/LF so untrusted text can never inject extra headers into an email subject. */
+function singleLine(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ');
+}
+
+const HTML_HEADERS = { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' };
+
+/**
+ * CSP for the authenticated /dashboard/* static app. Looser than the Worker-rendered pages' policy:
+ * these pages load js/dashboard.js, Google Fonts, and still use inline onclick handlers (hence
+ * 'unsafe-inline' for scripts until those move to addEventListener). connect-src 'self' keeps the
+ * session-bearing fetches pinned to this origin.
+ */
+const DASHBOARD_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  'font-src https://fonts.gstatic.com',
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'self' https://billing.stripe.com",
+].join('; ');
+
+/** Static assets ignore the Worker's headers, so authenticated dashboard pages get them added here. */
+async function serveDashboardAsset(request: Request, env: Env): Promise<Response> {
+  const asset = await env.ASSETS.fetch(request);
+  const response = new Response(asset.body, asset);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    if (name !== 'Content-Security-Policy') response.headers.set(name, value);
+  }
+  response.headers.set('Content-Security-Policy', DASHBOARD_CSP);
+  // Per-client data — never let a shared cache keep it.
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
+}
 
 // Cheap but effective at 1-2 clients: a single shared secret, not a real auth
 // system. HTTP Basic Auth (not Bearer) is deliberate — /admin is a
@@ -159,10 +265,9 @@ const SECURITY_HEADERS: Record<string, string> = {
 // Access, or actual sessions) once you're past the "I personally know every
 // client" stage — but ship THIS first, not nothing.
 function requireAdminAuth(request: Request, env: Env): Response | null {
-  const match = request.headers.get('Authorization')?.match(/^Basic (.+)$/);
-  const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(':') + 1) : null;
+  const password = readBasicAuthPassword(request);
 
-  if (password === null || password !== env.ADMIN_SECRET) {
+  if (password === null || !env.ADMIN_SECRET || !constantTimeEquals(password, env.ADMIN_SECRET)) {
     return new Response('Unauthorized', {
       status: 401,
       headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
@@ -177,6 +282,9 @@ export default {
     const path = url.pathname;
 
     try {
+      const crossSite = rejectCrossSiteRequest(request, url);
+      if (crossSite) return crossSite;
+
       if (request.method === 'GET' && path === '/api/health') {
         return await handleHealth(env);
       }
@@ -250,14 +358,15 @@ export default {
       }
 
       if (request.method === 'GET' && path === '/portal/verify') {
+        return handlePortalVerifyConfirm(request);
+      }
+
+      if (request.method === 'POST' && path === '/portal/verify') {
         return await handlePortalVerify(request, env);
       }
 
       if (request.method === 'POST' && path === '/portal/logout') {
-        return new Response(null, {
-          status: 303,
-          headers: { ...SECURITY_HEADERS, 'Set-Cookie': clearSessionCookie(), Location: '/portal' },
-        });
+        return await handlePortalLogout(request, env);
       }
 
       if (request.method === 'GET' && path === '/portal/dashboard') {
@@ -269,7 +378,7 @@ export default {
       }
 
       if (path.startsWith('/dashboard')) {
-        const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+        const clientId = await authenticateClient(request, env);
         const isAdmin = requireAdminAuth(request, env) === null;
         if (!clientId && !isAdmin) {
           return new Response(null, {
@@ -278,7 +387,7 @@ export default {
           });
         }
         if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-          return await env.ASSETS.fetch(request);
+          return await serveDashboardAsset(request, env);
         }
       }
 
@@ -356,6 +465,12 @@ export default {
 /** Parse, validate, store, and notify for a new lead. */
 async function handleLead(request: Request, env: Env): Promise<Response> {
   const lead = await parseLead(request);
+  if (lead === null) {
+    return Response.json(
+      { ok: false, error: 'Request body must be a JSON object or a form submission.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
 
   // Honeypot: bots fill every field. Real users never see "website".
   if (lead.website !== '') {
@@ -368,6 +483,16 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
     return Response.json(
       { ok: false, error: errors.join(' ') },
       { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  if (!(await consumeRateLimit(env.DB, `lead:ip:${clientAddress(request)}`, LEAD_PER_IP))) {
+    return Response.json(
+      { ok: false, error: 'Too many requests. Please email hello@invoicerescue.co.uk instead.' },
+      {
+        status: 429,
+        headers: { ...SECURITY_HEADERS, 'Retry-After': String(LEAD_PER_IP.windowSeconds) },
+      }
     );
   }
 
@@ -384,7 +509,9 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
     await env.NOTIFY.send({
       to: env.NOTIFY_TO,
       from: { name: SENDER_NAME, email: env.NOTIFY_FROM },
-      subject: `New Invoice Rescue lead: ${lead.name}${lead.company ? ' — ' + lead.company : ''}`,
+      subject: singleLine(
+        `New Invoice Rescue lead: ${lead.name}${lead.company ? ' — ' + lead.company : ''}`
+      ),
       text: [
         'New free-audit request from the landing page.',
         '',
@@ -406,29 +533,49 @@ async function handleLead(request: Request, env: Env): Promise<Response> {
   return leadSuccessResponse(request);
 }
 
-/** Accepts both HTML form posts (no-JS fallback) and JSON (fetch). */
-async function parseLead(request: Request): Promise<LeadInput> {
-  const contentType = request.headers.get('Content-Type') ?? '';
-  let raw: Record<string, unknown>;
-
-  if (contentType.includes('application/json')) {
-    raw = await request.json();
-  } else {
-    const form = await request.formData();
-    raw = Object.fromEntries(form.entries());
-  }
+/** Accepts both HTML form posts (no-JS fallback) and JSON (fetch). Null = unparseable body. */
+async function parseLead(request: Request): Promise<LeadInput | null> {
+  const raw = await readBodyFields(request);
+  if (raw === null) return null;
 
   const str = (v: unknown, max: number): string =>
     typeof v === 'string' ? v.trim().slice(0, max) : '';
 
   return {
-    name: str(raw.name, 120),
+    name: singleLine(str(raw.name, 120)),
     email: str(raw.email, 200),
-    company: str(raw.company, 160),
+    company: singleLine(str(raw.company, 160)),
     overdue_band: str(raw.overdue_band, 20),
     message: str(raw.message, 2000),
     website: str(raw.website, 200),
   };
+}
+
+/**
+ * Reads a JSON-object or form-encoded body into a plain record. Returns null (→ 400) for malformed
+ * JSON, a JSON non-object (null, array, string), or a content type that isn't either — instead of
+ * letting request.json()/formData() throw into the generic 500 handler.
+ */
+async function readBodyFields(request: Request): Promise<Record<string, unknown> | null> {
+  const contentType = request.headers.get('Content-Type') ?? '';
+  try {
+    if (contentType.includes('application/json')) {
+      const parsed: unknown = await request.json();
+      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    }
+    if (
+      contentType.includes('application/x-www-form-urlencoded') ||
+      contentType.includes('multipart/form-data')
+    ) {
+      const form = await request.formData();
+      return Object.fromEntries(form.entries());
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function validateLead(lead: LeadInput): string[] {
@@ -485,6 +632,24 @@ async function handleCreateClient(request: Request, env: Env): Promise<Response>
     return Response.json(
       { ok: false, error: errors.join(' ') },
       { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
+
+  // contact_email is the portal login identity — a duplicate would make the newer client
+  // permanently unable to log in (/portal/login resolves an email to a single client).
+  const existingClient = await env.DB.prepare(
+    `SELECT id FROM clients WHERE lower(contact_email) = lower(?1)`
+  )
+    .bind(input.contact_email)
+    .first<{ id: number }>();
+  if (existingClient) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'A client with that contact email already exists.',
+        id: existingClient.id,
+      },
+      { status: 409, headers: SECURITY_HEADERS }
     );
   }
 
@@ -550,6 +715,15 @@ async function handleInvoiceImport(
       { status: 400, headers: SECURITY_HEADERS }
     );
   }
+  if (rows.length > MAX_IMPORT_ROWS) {
+    return Response.json(
+      {
+        ok: false,
+        error: `CSV has ${rows.length} rows; the limit is ${MAX_IMPORT_ROWS} per import. Split the file and import each part.`,
+      },
+      { status: 413, headers: SECURITY_HEADERS }
+    );
+  }
 
   const str = (v: unknown, max: number): string =>
     typeof v === 'string' ? v.trim().slice(0, max) : '';
@@ -560,23 +734,32 @@ async function handleInvoiceImport(
     const debtorName = str(row.debtor_name, 160);
     const invoiceNumber = str(row.invoice_number, 60);
     const dueDate = row.due_date?.trim();
-    const amount = Number(row.amount);
+    // Accept thousands separators ("1,250.00") — common in spreadsheet exports.
+    const amount = Number((row.amount ?? '').replace(/,/g, '').trim());
     if (!debtorName || !invoiceNumber || !dueDate || !Number.isFinite(amount) || amount <= 0) {
       errors.push(
         `Row ${i + 2}: missing or invalid required field (debtor_name, invoice_number, amount, due_date).`
       );
       continue;
     }
-    await upsertTenantInvoice(env.DB, clientId, {
-      debtorName,
-      debtorEmail: str(row.debtor_email, 200) || null,
-      invoiceNumber,
-      amountPence: Math.round(amount * 100),
-      currency: str(row.currency, 10) || 'GBP',
-      issuedDate: row.issued_date?.trim() || null,
-      dueDate,
-      status: 'overdue',
-    });
+    try {
+      await upsertTenantInvoice(env.DB, clientId, {
+        debtorName,
+        debtorEmail: str(row.debtor_email, 200) || null,
+        invoiceNumber,
+        amountPence: Math.round(amount * 100),
+        currency: str(row.currency, 10) || 'GBP',
+        issuedDate: row.issued_date?.trim() || null,
+        dueDate,
+        status: 'overdue',
+      });
+    } catch (err) {
+      // Row-level validation failures are reported per row, like the checks above — one bad row
+      // must not 500 the whole import after earlier rows were already written.
+      if (!(err instanceof InvalidInvoiceDataError)) throw err;
+      errors.push(`Row ${i + 2}: ${err.message}`);
+      continue;
+    }
     imported++;
   }
 
@@ -612,7 +795,7 @@ async function handleHealth(env: Env): Promise<Response> {
 }
 
 async function handlePortalLoginPage(request: Request, env: Env): Promise<Response> {
-  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  const clientId = await authenticateClient(request, env);
   if (clientId !== null) {
     return new Response(null, {
       status: 303,
@@ -627,19 +810,35 @@ async function handlePortalLoginPage(request: Request, env: Env): Promise<Respon
 /** Emails a 15-minute magic link if the address matches a client. Always responds the same way,
  * whether or not it matched, so this can't be used to enumerate client email addresses. */
 async function handlePortalLoginRequest(request: Request, env: Env): Promise<Response> {
-  const contentType = request.headers.get('Content-Type') ?? '';
-  let email: string;
-  if (contentType.includes('application/json')) {
-    const raw = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    email = typeof raw.email === 'string' ? raw.email.trim() : '';
-  } else {
-    const form = await request.formData();
-    email = String(form.get('email') ?? '').trim();
+  const raw = (await readBodyFields(request)) ?? {};
+  const email = typeof raw.email === 'string' ? singleLine(raw.email.trim()).slice(0, 200) : '';
+
+  const ipBucket = `portal-login:ip:${clientAddress(request)}`;
+  if (!(await consumeRateLimit(env.DB, ipBucket, PORTAL_LOGIN_PER_IP))) {
+    return new Response(
+      renderPortalLogin('Too many login attempts. Please wait 15 minutes and try again.'),
+      {
+        status: 429,
+        headers: { ...HTML_HEADERS, 'Retry-After': String(PORTAL_LOGIN_PER_IP.windowSeconds) },
+      }
+    );
   }
 
-  const client = await env.DB.prepare(`SELECT id FROM clients WHERE contact_email = ?1`)
-    .bind(email)
-    .first<{ id: number }>();
+  // Per-address limit is silent (same response as a send) so it can't be used to probe which
+  // addresses are clients; it just stops a single inbox being flooded with magic links.
+  const withinEmailLimit =
+    email !== '' &&
+    (await consumeRateLimit(
+      env.DB,
+      `portal-login:email:${email.toLowerCase()}`,
+      PORTAL_LOGIN_PER_EMAIL
+    ));
+
+  const client = withinEmailLimit
+    ? await env.DB.prepare(`SELECT id FROM clients WHERE lower(contact_email) = lower(?1)`)
+        .bind(email)
+        .first<{ id: number }>()
+    : null;
   if (client) {
     const token = await signLoginToken(client.id, env.PORTAL_SESSION_SECRET);
     const verifyUrl = `${new URL(request.url).origin}/portal/verify?token=${token}`;
@@ -660,10 +859,22 @@ async function handlePortalLoginRequest(request: Request, env: Env): Promise<Res
   });
 }
 
-async function handlePortalVerify(request: Request, env: Env): Promise<Response> {
+/**
+ * GET /portal/verify only renders a "Continue" button that POSTs the token. Magic links are
+ * single-use, and corporate mail scanners (e.g. Microsoft Safe Links) pre-fetch every GET link in
+ * an email — consuming on GET would burn the link before the client ever clicked it.
+ */
+function handlePortalVerifyConfirm(request: Request): Response {
   const token = new URL(request.url).searchParams.get('token') ?? '';
-  const clientId = await verifyLoginToken(token, env.PORTAL_SESSION_SECRET);
-  if (clientId === null) {
+  return new Response(renderPortalVerifyConfirm(token), { headers: HTML_HEADERS });
+}
+
+async function handlePortalVerify(request: Request, env: Env): Promise<Response> {
+  const fields = (await readBodyFields(request)) ?? {};
+  const token = typeof fields.token === 'string' ? fields.token : '';
+  const clientId = await consumeLoginToken(token, env);
+  const sessionEpoch = clientId === null ? null : await readSessionEpoch(env.DB, clientId);
+  if (clientId === null || sessionEpoch === null) {
     return new Response(
       renderPortalLogin('That link is invalid or has expired. Request a new one below.'),
       {
@@ -673,15 +884,25 @@ async function handlePortalVerify(request: Request, env: Env): Promise<Response>
     );
   }
 
-  const cookie = await buildSessionCookie(clientId, env.PORTAL_SESSION_SECRET);
+  const cookie = await buildSessionCookie(clientId, env.PORTAL_SESSION_SECRET, sessionEpoch);
   return new Response(null, {
     status: 303,
     headers: { ...SECURITY_HEADERS, 'Set-Cookie': cookie, Location: '/portal/dashboard' },
   });
 }
 
+/** Clears the cookie and bumps the client's session epoch, so copies of the token stop working too. */
+async function handlePortalLogout(request: Request, env: Env): Promise<Response> {
+  const clientId = await authenticateClient(request, env);
+  if (clientId !== null) await revokeClientSessions(env.DB, clientId);
+  return new Response(null, {
+    status: 303,
+    headers: { ...SECURITY_HEADERS, 'Set-Cookie': clearSessionCookie(), Location: '/portal' },
+  });
+}
+
 async function handlePortalDashboard(request: Request, env: Env): Promise<Response> {
-  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  const clientId = await authenticateClient(request, env);
   if (clientId === null) {
     return new Response(null, {
       status: 303,
@@ -722,7 +943,7 @@ async function handlePortalDashboard(request: Request, env: Env): Promise<Respon
 }
 
 async function handlePortalBilling(request: Request, env: Env): Promise<Response> {
-  const clientId = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  const clientId = await authenticateClient(request, env);
   if (clientId === null) {
     return new Response(null, {
       status: 303,
@@ -736,7 +957,7 @@ async function handlePortalBilling(request: Request, env: Env): Promise<Response
 
   if (!client?.stripe_customer_id) {
     return new Response(
-      `<!doctype html><html><body><p>Billing isn't set up on your account yet — email <a href="mailto:hello@invoicerescue.co.uk">hello@invoicerescue.co.uk</a>.</p><p><a href="/portal/dashboard">Back to dashboard</a></p></body></html>`,
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Billing — Invoice Rescue</title></head><body><p>Billing isn't set up on your account yet — email <a href="mailto:hello@invoicerescue.co.uk">hello@invoicerescue.co.uk</a>.</p><p><a href="/portal/dashboard">Back to dashboard</a></p></body></html>`,
       { headers: { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8' } }
     );
   }
@@ -772,12 +993,14 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     );
   }
 
-  const event = JSON.parse(rawBody) as {
-    id?: string;
-    type: string;
-    created?: number;
-    data: { object: { customer?: string; status?: string } };
-  };
+  // A correctly signed but malformed body is a permanent failure: 400, not a 500 Stripe retries forever.
+  const event = parseWebhookEvent(rawBody);
+  if (!event) {
+    return Response.json(
+      { ok: false, error: 'Malformed event payload.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
+  }
 
   const eventId = event.id;
   const customerId = event.data?.object?.customer;
@@ -943,7 +1166,7 @@ async function handleOAuthConnect(
 ): Promise<Response> {
   const jsonHeaders = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
   const url = new URL(request.url);
-  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  let clientId: number | null = await authenticateClient(request, env);
 
   if (clientId === null && requireAdminAuth(request, env) === null) {
     const clientParam = url.searchParams.get('client_id');
@@ -1107,7 +1330,7 @@ async function handleOAuthRefresh(
 ): Promise<Response> {
   const jsonHeaders = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  let clientId: number | null = await authenticateClient(request, env);
   if (clientId === null && requireAdminAuth(request, env) === null) {
     if (
       typeof body.client_id === 'number' &&
@@ -1197,7 +1420,7 @@ async function handleOAuthDisconnect(
 ): Promise<Response> {
   const jsonHeaders = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  let clientId: number | null = await authenticateClient(request, env);
   if (clientId === null && requireAdminAuth(request, env) === null) {
     if (
       typeof body.client_id === 'number' &&
@@ -1270,7 +1493,7 @@ async function handleOAuthStatus(
 ): Promise<Response> {
   const jsonHeaders = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
   const url = new URL(request.url);
-  let clientId: number | null = await authenticateClient(request, env.PORTAL_SESSION_SECRET);
+  let clientId: number | null = await authenticateClient(request, env);
   if (clientId === null && requireAdminAuth(request, env) === null) {
     const clientParam = url.searchParams.get('client_id');
     if (clientParam) {

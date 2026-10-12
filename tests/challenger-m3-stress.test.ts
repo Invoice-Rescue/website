@@ -296,7 +296,8 @@ describe('Milestone M3 Stress Suite — Challenger 1 (Portal & Queue Concurrency
         .first<any>();
       assert.strictEqual(row1.status, 'sent');
       assert.strictEqual(row1.outcome, 'sent');
-      assert.strictEqual(row1.reviewed_by, 'Tibor Rames');
+      // Client-session approval is attributed to the client, not the operator (audit-trail fix 2026-10-12)
+      assert.strictEqual(row1.reviewed_by, 'Vanguard Services (client)');
 
       // 2nd approval (duplicate call)
       const req2 = new Request('http://localhost/api/admin/drafts/500/approve', {
@@ -473,10 +474,11 @@ describe('Milestone M3 Stress Suite — Challenger 1 (Portal & Queue Concurrency
         .first<any>();
       assert.strictEqual(row.status, 'skipped');
       assert.ok(row.reviewed_at !== null);
-      assert.strictEqual(row.reviewed_by, 'Tibor Rames');
+      // Client-session skip is attributed to the client, not the operator (audit-trail fix 2026-10-12)
+      assert.strictEqual(row.reviewed_by, 'Skip Test Client (client)');
     });
 
-    test('3.2 Repeated skip on already skipped draft is idempotent (returns 200, 0 emails)', async () => {
+    test('3.2 Repeated skip on already skipped draft returns 409 (already reviewed), 0 emails', async () => {
       const { env, db, send, notify } = createTestEnv();
       await seedDraftForSkip(db);
 
@@ -499,10 +501,9 @@ describe('Milestone M3 Stress Suite — Challenger 1 (Portal & Queue Concurrency
         }),
         env
       );
-      assert.strictEqual(res2.status, 200);
+      assert.strictEqual(res2.status, 409);
       const json2 = (await res2.json()) as any;
-      assert.strictEqual(json2.ok, true);
-      assert.strictEqual(json2.status, 'skipped');
+      assert.strictEqual(json2.ok, false);
 
       // Third skip via legacy alias
       const res3 = await worker.fetch(
@@ -512,7 +513,7 @@ describe('Milestone M3 Stress Suite — Challenger 1 (Portal & Queue Concurrency
         }),
         env
       );
-      assert.strictEqual(res3.status, 200);
+      assert.strictEqual(res3.status, 409);
 
       assert.strictEqual(send.sent.length, 0);
       assert.strictEqual(notify.sent.length, 0);
