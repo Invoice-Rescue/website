@@ -3,11 +3,7 @@
     "claude-flow": {
       "description": "Claude Flow orchestration and memory mesh server",
       "command": "npx",
-      "args": [
-        "ruflo@latest",
-        "mcp",
-        "start"
-      ],
+      "args": ["ruflo@latest", "mcp", "start"],
       "env": {
         "npm_config_update_notifier": "false",
         "CLAUDE_FLOW_MODE": "v3",
@@ -17,6 +13,10 @@
         "CLAUDE_FLOW_MEMORY_BACKEND": "hybrid"
       },
       "autoStart": true
+    },
+    "graft": {
+      "command": "npx",
+      "args": ["-y", "@nanonets/graft", "mcp"]
     }
   }
 }
