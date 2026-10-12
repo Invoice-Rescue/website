@@ -11,7 +11,7 @@ async function logStripeError(operation: string, res: Response): Promise<void> {
   let type: string | undefined;
   let code: string | undefined;
   try {
-    const body = await res.json();
+    const body = await res.json<{ error?: { type?: unknown; code?: unknown } }>();
     if (typeof body.error?.type === 'string') type = body.error.type;
     if (typeof body.error?.code === 'string') code = body.error.code;
   } catch {
@@ -39,7 +39,7 @@ export async function createCustomer(
     await logStripeError('createCustomer', res);
     return null;
   }
-  const data = await res.json();
+  const data = await res.json<{ id?: unknown }>();
   return typeof data.id === 'string' ? data.id : null;
 }
 
@@ -61,7 +61,7 @@ export async function createBillingPortalSession(
     await logStripeError('createBillingPortalSession', res);
     return null;
   }
-  const data = await res.json();
+  const data = await res.json<{ url?: unknown }>();
   return typeof data.url === 'string' ? data.url : null;
 }
 

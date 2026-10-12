@@ -230,7 +230,7 @@ describe('Chase hardening (2026-10-12)', () => {
       fx.env
     );
     assert.equal(ok.status, 200);
-    assert.equal((await ok.json()).count, 1);
+    assert.equal((await ok.json<{ count: number }>()).count, 1);
 
     const portal = await resolvePortalClientId(
       new Request('http://localhost/api/portal/dashboard?client_id=abc', {

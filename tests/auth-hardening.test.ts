@@ -311,7 +311,7 @@ describe('CSV import robustness', () => {
       `${header}\nGood Ltd,,A1,10,GBP,,2026-09-01\nBad Ltd,,A2,10,GBP,,01/09/2026\nX,,A3,10,GBP,,2026-09-01`
     );
     assert.equal(r.status, 200);
-    const json = await r.json();
+    const json = await r.json<{ imported: number; errors: string[] }>();
     assert.equal(json.imported, 1);
     assert.equal(json.errors.length, 2);
   });
@@ -320,7 +320,7 @@ describe('CSV import robustness', () => {
     const { env, db } = createTestEnv();
     seedClient(db);
     const r = await importCsv(env, `${header}\nGood Ltd,,A1,"1,250.00",GBP,,2026-09-01`);
-    const json = await r.json();
+    const json = await r.json<{ imported: number }>();
     assert.equal(json.imported, 1);
     const row = await db
       .prepare("SELECT amount_pence FROM invoices WHERE invoice_number = 'A1'")
