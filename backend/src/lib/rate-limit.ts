@@ -7,6 +7,9 @@
  * because at this traffic level one extra upsert per request is negligible.
  */
 
+/** Must exceed the longest RateLimitRule.windowSeconds in use (currently 1 hour). */
+const RATE_LIMIT_RETENTION_SECONDS = 24 * 60 * 60;
+
 export interface RateLimitRule {
   /** Max requests allowed per window. */
   limit: number;
@@ -36,10 +39,12 @@ export async function consumeRateLimit(
     .bind(bucket, windowStart)
     .first<{ hits: number }>();
 
-  // Expired windows are never read again; prune them so the table stays tiny.
+  // Expired windows are never read again. Prune globally (not just this bucket — one-off IPs and
+  // addresses would otherwise linger forever), keeping anything young enough to be a live window
+  // under any rule.
   await db
-    .prepare(`DELETE FROM rate_limits WHERE bucket = ?1 AND window_start < ?2`)
-    .bind(bucket, windowStart)
+    .prepare(`DELETE FROM rate_limits WHERE window_start < ?1`)
+    .bind(nowSeconds - RATE_LIMIT_RETENTION_SECONDS)
     .run();
 
   return (row?.hits ?? 1) <= rule.limit;

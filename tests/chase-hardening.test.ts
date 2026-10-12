@@ -1,6 +1,7 @@
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTestEnv, createBasicAuthHeader, type TestEnvFixture } from './e2e/harness';
+import worker from '../backend/src/index';
 import { runOverdueDetection } from '../backend/src/lib/chase-runner';
 import {
   SECURITY_HEADERS,
@@ -248,5 +249,43 @@ describe('Chase hardening (2026-10-12)', () => {
     );
     assert.match(SECURITY_HEADERS['Content-Security-Policy'], /default-src 'none'/);
     assert.match(SECURITY_HEADERS['Content-Security-Policy'], /frame-ancestors 'none'/);
+  });
+});
+
+describe('approve keeps the draft recoverable until delivery succeeds', () => {
+  test("an in-flight (leased) draft stays 'draft' and blocks a second approval; an expired lease does not", async () => {
+    const { env, db } = createTestEnv();
+    db.rawSqlite.exec(`
+      INSERT INTO clients (id, company_name, contact_email) VALUES (1, 'Lease Co', 'lease@test.com');
+      INSERT INTO invoices (id, client_id, debtor_name, debtor_email, invoice_number, amount_pence, due_date, status)
+      VALUES (10, 1, 'Debtor', 'debtor@test.com', 'INV-L', 1000, '2026-01-01', 'overdue');
+      INSERT INTO chase_log (id, invoice_id, step, channel, status, body) VALUES (100, 10, 1, 'email', 'draft', 'Body');
+    `);
+    const now = Math.floor(Date.now() / 1000);
+    db.rawSqlite.exec(`UPDATE chase_log SET dispatch_lease_until = ${now + 120} WHERE id = 100`);
+    const approve = () =>
+      worker.fetch(
+        new Request('http://localhost/api/chase/100/approve', {
+          method: 'POST',
+          headers: {
+            Authorization: createBasicAuthHeader(env.ADMIN_SECRET),
+            Accept: 'application/json',
+          },
+        }),
+        env
+      );
+    assert.equal((await approve()).status, 404, 'another approval holds the lease');
+    const row = await db
+      .prepare('SELECT status FROM chase_log WHERE id = 100')
+      .first<{ status: string }>();
+    assert.equal(row?.status, 'draft', 'never marked sent before delivery');
+
+    db.rawSqlite.exec(`UPDATE chase_log SET dispatch_lease_until = ${now - 1} WHERE id = 100`);
+    assert.equal((await approve()).status, 200, 'an expired lease (dead attempt) is reclaimable');
+    const sent = await db
+      .prepare('SELECT status, dispatch_lease_until FROM chase_log WHERE id = 100')
+      .first<{ status: string; dispatch_lease_until: number | null }>();
+    assert.equal(sent?.status, 'sent');
+    assert.equal(sent?.dispatch_lease_until, null);
   });
 });

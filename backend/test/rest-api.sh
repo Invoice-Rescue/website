@@ -46,9 +46,15 @@ res=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/api/clients" -H 
 check "client rejects missing auth" "401" "$res"
 
 echo "== /api/clients =="
+# Unique per run: contact_email is unique (case-insensitive), so a fixed address 409s on rerun.
+client_email="jane-$$-$(date +%s)@acme.test"
 res=$(curl -s -u "admin:$ADMIN_SECRET" -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"company_name":"Acme Ltd","contact_email":"jane@acme.test","plan":"engine","accounting_source":"csv"}')
+  -d "{\"company_name\":\"Acme Ltd\",\"contact_email\":\"$client_email\",\"plan\":\"engine\",\"accounting_source\":\"csv\"}")
 check "client created" '"ok":true' "$res"
+
+res=$(curl -s -o /dev/null -w '%{http_code}' -u "admin:$ADMIN_SECRET" -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" \
+  -d "{\"company_name\":\"Acme Dup\",\"contact_email\":\"$(echo "$client_email" | tr '[:lower:]' '[:upper:]')\"}")
+check "duplicate contact email rejected (case-insensitive)" "409" "$res"
 
 echo "== /api/clients validation =="
 res=$(curl -s -u "admin:$ADMIN_SECRET" -X POST "$BASE_URL/api/clients" -H "Content-Type: application/json" -H "Accept: application/json" \

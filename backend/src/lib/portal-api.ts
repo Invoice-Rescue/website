@@ -20,6 +20,9 @@ import { headerSafe, sendDebtorCommunication } from './email';
 export const SENDER_NAME = 'Invoice Rescue';
 export const LOCKED_SENDER_EMAIL = 'hello@invoicerescue.co.uk';
 
+/** How long an approval holds a draft while its email is being dispatched. */
+const DISPATCH_LEASE_SECONDS = 5 * 60;
+
 export const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -40,7 +43,10 @@ export const SECURITY_HEADERS: Record<string, string> = {
 function queryClientId(request: Request): number | null {
   const raw = new URL(request.url).searchParams.get('client_id');
   if (!raw) return null;
-  return /^[1-9]\d*$/.test(raw) ? Number(raw) : NaN;
+  if (!/^[1-9]\d*$/.test(raw)) return NaN;
+  const id = Number(raw);
+  // Digits-only can still exceed 2^53 and round to a different id — reject rather than misbind.
+  return Number.isSafeInteger(id) ? id : NaN;
 }
 
 function invalidClientIdResponse(): Response {
@@ -873,20 +879,19 @@ export async function handleApproveDraft(
     }
   }
 
-  // Claim the draft before sending: the conditional UPDATE is atomic, so of two concurrent
-  // approvals only one sees changes === 1 and sends (check-then-send used to double-send).
+  // Take a short dispatch lease before sending: the conditional UPDATE is atomic, so of two
+  // concurrent approvals only one gets changes === 1 and sends (check-then-send double-sent).
+  // The row stays 'draft' until delivery succeeds — marking it 'sent' up front left a false
+  // audit record if the Worker died mid-send. An expired lease makes the draft approvable again.
   const reviewerName = reviewerLabel(auth, env, row);
+  const nowSeconds = Math.floor(Date.now() / 1000);
   const claim = await env.DB.prepare(
     `UPDATE chase_log
-     SET status = 'sent',
-         body = ?2,
-         outcome = 'sent',
-         sent_at = datetime('now'),
-         reviewed_at = datetime('now'),
-         reviewed_by = ?3
-     WHERE id = ?1 AND status = 'draft'`
+     SET dispatch_lease_until = ?2
+     WHERE id = ?1 AND status = 'draft'
+       AND (dispatch_lease_until IS NULL OR dispatch_lease_until < ?3)`
   )
-    .bind(draftId, body, reviewerName)
+    .bind(draftId, nowSeconds + DISPATCH_LEASE_SECONDS, nowSeconds)
     .run();
 
   if (claim.meta.changes === 0) {
@@ -905,24 +910,31 @@ export async function handleApproveDraft(
   );
 
   if (!sent) {
-    // Release the claim so the draft returns to the review queue exactly as it was.
+    // Release the lease so the draft is immediately approvable again, unchanged.
     await env.DB.prepare(
-      `UPDATE chase_log
-       SET status = 'draft',
-           body = ?2,
-           outcome = NULL,
-           sent_at = ?3,
-           reviewed_at = NULL,
-           reviewed_by = NULL
-       WHERE id = ?1 AND status = 'sent'`
+      `UPDATE chase_log SET dispatch_lease_until = NULL WHERE id = ?1 AND status = 'draft'`
     )
-      .bind(draftId, row.body, row.sent_at)
+      .bind(draftId)
       .run();
     return Response.json(
       { ok: false, error: 'Failed to dispatch email communication to debtor.' },
       { status: 500, headers: SECURITY_HEADERS }
     );
   }
+
+  await env.DB.prepare(
+    `UPDATE chase_log
+     SET status = 'sent',
+         body = ?2,
+         outcome = 'sent',
+         sent_at = datetime('now'),
+         reviewed_at = datetime('now'),
+         reviewed_by = ?3,
+         dispatch_lease_until = NULL
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, body, reviewerName)
+    .run();
 
   const accepts = request.headers.get('Accept') ?? '';
   if (accepts.includes('application/json')) {

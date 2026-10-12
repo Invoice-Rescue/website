@@ -372,3 +372,57 @@ describe('dashboard security headers', () => {
     assert.equal(r.headers.get('Cache-Control'), 'private, no-store');
   });
 });
+
+describe('PR #14 review follow-ups', () => {
+  test('client_id beyond the safe-integer range is a 400, not a rounded id', async () => {
+    const { env } = createTestEnv();
+    const r = await worker.fetch(
+      new Request(`${ORIGIN}/api/admin/drafts?client_id=9007199254740993`, {
+        headers: { Authorization: createBasicAuthHeader(env.ADMIN_SECRET) },
+      }),
+      env
+    );
+    assert.equal(r.status, 400);
+  });
+
+  test('case-insensitive email uniqueness is enforced by the schema, not just the pre-check', async () => {
+    const { db } = createTestEnv();
+    seedClient(db, 1, 'jane@acme.test');
+    assert.throws(() => {
+      db.rawSqlite.exec(
+        `INSERT INTO clients (company_name, contact_email) VALUES ('Dup', 'JANE@ACME.TEST')`
+      );
+    }, /UNIQUE constraint failed/);
+  });
+
+  test('a failed epoch lookup does not burn the magic link', async () => {
+    const { env, db } = createTestEnv();
+    seedClient(db);
+    const token = await signLoginToken(1, env.PORTAL_SESSION_SECRET);
+    const realPrepare = env.DB.prepare.bind(env.DB);
+    let failEpochRead = true;
+    (env.DB as unknown as { prepare: (sql: string) => unknown }).prepare = (sql: string) => {
+      if (failEpochRead && sql.includes('SELECT session_epoch'))
+        throw new Error('transient D1 error');
+      return realPrepare(sql);
+    };
+    const failed = await worker.fetch(verifyPost(token), env);
+    assert.equal(failed.status, 500);
+    failEpochRead = false;
+    const retry = await worker.fetch(verifyPost(token), env);
+    assert.equal(retry.status, 303, 'the same link must still work after a transient failure');
+  });
+
+  test('rate-limit prune removes expired windows from every bucket', async () => {
+    const { env, db } = createTestEnv();
+    const rule = { limit: 5, windowSeconds: 60 };
+    const old = Date.UTC(2026, 9, 10, 12, 0, 0);
+    await consumeRateLimit(env.DB, 'one-off:ip:198.51.100.1', rule, old);
+    await consumeRateLimit(env.DB, 'other:ip:198.51.100.2', rule, old + 3 * 24 * 3600 * 1000);
+    const rows = await db.prepare('SELECT bucket FROM rate_limits').all<{ bucket: string }>();
+    assert.deepEqual(
+      rows.results.map((r) => r.bucket),
+      ['other:ip:198.51.100.2']
+    );
+  });
+});

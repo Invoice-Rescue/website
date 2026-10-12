@@ -65,6 +65,7 @@ import { runOverdueDetection } from './lib/chase-runner';
 import { renderReviewQueue, type DraftRow } from './lib/admin';
 import {
   signLoginToken,
+  verifyLoginToken,
   consumeLoginToken,
   buildSessionCookie,
   clearSessionCookie,
@@ -653,19 +654,30 @@ async function handleCreateClient(request: Request, env: Env): Promise<Response>
     );
   }
 
-  const result = await env.DB.prepare(
-    `INSERT INTO clients (company_name, contact_name, contact_email, plan, status, accounting_source, voice_notes)
-     VALUES (?1, ?2, ?3, ?4, 'onboarding', ?5, ?6)`
-  )
-    .bind(
-      input.company_name,
-      input.contact_name || null,
-      input.contact_email,
-      input.plan,
-      input.accounting_source,
-      input.voice_notes || null
+  // The check above gives a friendly 409 in the common case; the case-insensitive unique index
+  // (migration 0009) is what actually enforces it when two creates race past that check.
+  let result: D1Result;
+  try {
+    result = await env.DB.prepare(
+      `INSERT INTO clients (company_name, contact_name, contact_email, plan, status, accounting_source, voice_notes)
+       VALUES (?1, ?2, ?3, ?4, 'onboarding', ?5, ?6)`
     )
-    .run();
+      .bind(
+        input.company_name,
+        input.contact_name || null,
+        input.contact_email,
+        input.plan,
+        input.accounting_source,
+        input.voice_notes || null
+      )
+      .run();
+  } catch (err) {
+    if (!(err instanceof Error) || !/UNIQUE constraint failed/i.test(err.message)) throw err;
+    return Response.json(
+      { ok: false, error: 'A client with that contact email already exists.' },
+      { status: 409, headers: SECURITY_HEADERS }
+    );
+  }
 
   const clientId = result.meta.last_row_id;
 
@@ -872,8 +884,11 @@ function handlePortalVerifyConfirm(request: Request): Response {
 async function handlePortalVerify(request: Request, env: Env): Promise<Response> {
   const fields = (await readBodyFields(request)) ?? {};
   const token = typeof fields.token === 'string' ? fields.token : '';
-  const clientId = await consumeLoginToken(token, env);
-  const sessionEpoch = clientId === null ? null : await readSessionEpoch(env.DB, clientId);
+  // Everything fallible happens BEFORE the token is consumed: if the epoch read failed after
+  // consumption, the one-time link would be burned without a session ever being issued.
+  const candidateId = await verifyLoginToken(token, env.PORTAL_SESSION_SECRET);
+  const sessionEpoch = candidateId === null ? null : await readSessionEpoch(env.DB, candidateId);
+  const clientId = sessionEpoch === null ? null : await consumeLoginToken(token, env);
   if (clientId === null || sessionEpoch === null) {
     return new Response(
       renderPortalLogin('That link is invalid or has expired. Request a new one below.'),
