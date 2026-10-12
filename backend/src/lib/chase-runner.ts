@@ -2,7 +2,7 @@ import { CADENCE_DAYS, STEP_LABELS, diffDays } from './escalation';
 export { diffDays };
 import { fixedCompensationPence, statutoryInterestPence } from './statutory-interest';
 import { buildChasePrompt, draftChaseMessage } from './gemini';
-import { sendOperatorNotification } from './email';
+import { headerSafe, sendOperatorNotification } from './email';
 
 export const SENDER_NAME = 'Invoice Rescue';
 
@@ -155,7 +155,7 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
         // Alert operator via sendOperatorNotification (resilient error boundary)
         await sendOperatorNotification(
           env,
-          `Invoice Rescue: Invoice ${inv.invoice_number} escalated (Stage 4 exhausted)`,
+          headerSafe(`Invoice Rescue: Invoice ${inv.invoice_number} escalated (Stage 4 exhausted)`),
           `Invoice ${inv.invoice_number} for ${inv.debtor_name} (${inv.company_name}) has reached terminal escalation after Stage 4 final notice with no payment received. Hand back to client recommended.`
         );
 
@@ -225,14 +225,22 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
       body = generateFallbackDraft(inv, nextStep, interest, compensation);
     }
 
-    await env.DB.prepare(
+    // An overlapping run may have inserted a draft while we waited on Gemini; the partial unique
+    // index uq_chase_log_one_draft_per_invoice (migration 0008) rejects the second one. The upsert
+    // form (unlike INSERT OR IGNORE) only swallows uniqueness conflicts, not CHECK/NOT NULL failures.
+    const insert = await env.DB.prepare(
       `INSERT INTO chase_log (invoice_id, step, channel, subject, outcome, status, body)
-       VALUES (?1, ?2, 'email', ?3, NULL, 'draft', ?4)`
+       VALUES (?1, ?2, 'email', ?3, NULL, 'draft', ?4)
+       ON CONFLICT DO NOTHING`
     )
-      .bind(inv.id, nextStep, `Re: Invoice ${inv.invoice_number}`, body)
+      .bind(inv.id, nextStep, headerSafe(`Re: Invoice ${inv.invoice_number}`), body)
       .run();
 
-    result.draftsCreated++;
+    if (insert.meta.changes > 0) {
+      result.draftsCreated++;
+    } else {
+      result.skippedDrafts++;
+    }
   }
 
   // Notify operator if any drafts are waiting for review

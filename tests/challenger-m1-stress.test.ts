@@ -563,13 +563,9 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
         INSERT INTO invoices (id, client_id, debtor_name, invoice_number, amount_pence, due_date, status)
         VALUES (50, 5, 'Debtor Multi Draft', 'INV-SETTLE-50', 85000, '2026-08-01', 'overdue');
 
-        -- 3 pending drafts
+        -- 1 pending draft (migration 0008 enforces at most one pending draft per invoice)
         INSERT INTO chase_log (id, invoice_id, step, channel, status, body)
-        VALUES (501, 50, 1, 'email', 'draft', 'Draft 1 message');
-        INSERT INTO chase_log (id, invoice_id, step, channel, status, body)
-        VALUES (502, 50, 2, 'email', 'draft', 'Draft 2 message');
-        INSERT INTO chase_log (id, invoice_id, step, channel, status, body)
-        VALUES (503, 50, 3, 'email', 'draft', 'Draft 3 message');
+        VALUES (501, 50, 2, 'email', 'draft', 'Draft 2 message');
 
         -- 1 already skipped chase
         INSERT INTO chase_log (id, invoice_id, step, channel, status, body, reviewed_at)
@@ -606,12 +602,12 @@ describe('Empirical Challenger 2 — Milestone M1 Stress Suite', () => {
       assert.strictEqual(inv.status, 'paid');
       assert.strictEqual(inv.paid_date, '2026-09-16');
 
-      // Verify drafts 501, 502, 503 are all transitioned to 'skipped' with reviewed_at
+      // Verify the pending draft is transitioned to 'skipped' with reviewed_at
       const drafts = await db
-        .prepare('SELECT id, status, reviewed_at FROM chase_log WHERE id IN (501, 502, 503)')
+        .prepare('SELECT id, status, reviewed_at FROM chase_log WHERE id = 501')
         .all<any>();
 
-      assert.strictEqual(drafts.results.length, 3);
+      assert.strictEqual(drafts.results.length, 1);
       for (const d of drafts.results) {
         assert.strictEqual(d.status, 'skipped', `Draft ${d.id} must be transitioned to skipped`);
         assert.ok(d.reviewed_at, `Draft ${d.id} must have reviewed_at populated`);

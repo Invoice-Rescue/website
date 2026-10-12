@@ -1,5 +1,5 @@
-import { test, describe } from "node:test";
-import assert from "node:assert";
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
 import {
   signLoginToken,
   verifyLoginToken,
@@ -7,78 +7,84 @@ import {
   clearSessionCookie,
   authenticateClient,
   verifySessionToken,
-} from "../backend/src/lib/portal-auth";
+} from '../backend/src/lib/portal-auth';
+import { createTestEnv } from './e2e/harness';
 
-describe("portal-auth", () => {
-  const testSecret = "test-portal-secret-key-32-bytes-long!";
+describe('portal-auth', () => {
+  const testSecret = 'test-portal-secret-key-32-bytes-long!';
 
-  test("signs and verifies login magic link token for a client", async () => {
+  test('signs and verifies login magic link token for a client', async () => {
     const clientId = 42;
     const token = await signLoginToken(clientId, testSecret);
-    assert.strictEqual(typeof token, "string");
-    assert.ok(token.includes("."));
+    assert.strictEqual(typeof token, 'string');
+    assert.ok(token.includes('.'));
 
     const verifiedId = await verifyLoginToken(token, testSecret);
     assert.strictEqual(verifiedId, clientId);
   });
 
-  test("rejects tampered or corrupted login token", async () => {
+  test('rejects tampered or corrupted login token', async () => {
     const token = await signLoginToken(10, testSecret);
-    const [payloadB64, sig] = token.split(".");
+    const [payloadB64, sig] = token.split('.');
     const tamperedToken = `${payloadB64}x.${sig}`;
 
     const verified = await verifyLoginToken(tamperedToken, testSecret);
     assert.strictEqual(verified, null);
   });
 
-  test("rejects token signed with wrong secret", async () => {
+  test('rejects token signed with wrong secret', async () => {
     const token = await signLoginToken(10, testSecret);
-    const verified = await verifyLoginToken(token, "different-wrong-secret-key-32b");
+    const verified = await verifyLoginToken(token, 'different-wrong-secret-key-32b');
     assert.strictEqual(verified, null);
   });
 
-  test("rejects token when secret is empty string (fail closed)", async () => {
+  test('rejects token when secret is empty string (fail closed)', async () => {
     await assert.rejects(
       async () => {
-        await signLoginToken(1, "");
+        await signLoginToken(1, '');
       },
-      { message: /portal session secret is not configured/ },
+      { message: /portal session secret is not configured/ }
     );
   });
 
-  test("builds and verifies portal session cookie", async () => {
+  test('builds and verifies portal session cookie', async () => {
     const clientId = 101;
+    const { env, db } = createTestEnv({ PORTAL_SESSION_SECRET: testSecret });
+    db.rawSqlite.exec(
+      `INSERT INTO clients (id, company_name, contact_email) VALUES (101, 'Cookie Co', 'cookie@test.com')`
+    );
     const cookieHeader = await buildSessionCookie(clientId, testSecret);
-    assert.ok(cookieHeader.includes("portal_session="));
-    assert.ok(cookieHeader.includes("HttpOnly"));
-    assert.ok(cookieHeader.includes("SameSite=Lax"));
+    assert.ok(cookieHeader.includes('portal_session='));
+    assert.ok(cookieHeader.includes('HttpOnly'));
+    assert.ok(cookieHeader.includes('SameSite=Lax'));
 
-    const rawToken = cookieHeader.split("portal_session=")[1].split(";")[0];
+    const rawToken = cookieHeader.split('portal_session=')[1].split(';')[0];
     const verifiedId = await verifySessionToken(rawToken, testSecret);
     assert.strictEqual(verifiedId, clientId);
 
-    const request = new Request("https://invoicerescue.co.uk/portal/dashboard", {
+    const request = new Request('https://invoicerescue.co.uk/portal/dashboard', {
       headers: {
         Cookie: `other=123; portal_session=${rawToken}; foo=bar`,
       },
     });
-    const authId = await authenticateClient(request, testSecret);
+    const authId = await authenticateClient(request, env);
     assert.strictEqual(authId, clientId);
   });
 
-  test("authenticateClient returns null when cookie is missing or invalid", async () => {
-    const requestNoCookie = new Request("https://invoicerescue.co.uk/portal/dashboard");
-    assert.strictEqual(await authenticateClient(requestNoCookie, testSecret), null);
+  test('authenticateClient returns null when cookie is missing or invalid', async () => {
+    const { env } = createTestEnv({ PORTAL_SESSION_SECRET: testSecret });
+    const requestNoCookie = new Request('https://invoicerescue.co.uk/portal/dashboard');
+    assert.strictEqual(await authenticateClient(requestNoCookie, env), null);
 
-    const requestBadCookie = new Request("https://invoicerescue.co.uk/portal/dashboard", {
-      headers: { Cookie: "portal_session=invalid.token" },
+    const requestBadCookie = new Request('https://invoicerescue.co.uk/portal/dashboard', {
+      headers: { Cookie: 'portal_session=invalid.token' },
     });
-    assert.strictEqual(await authenticateClient(requestBadCookie, testSecret), null);
+    assert.strictEqual(await authenticateClient(requestBadCookie, env), null);
   });
 
-  test("clearSessionCookie returns expired cookie instruction", () => {
+  test('clearSessionCookie returns expired cookie instruction', () => {
     const clearHeader = clearSessionCookie();
-    assert.ok(clearHeader.includes("Max-Age=0"));
-    assert.ok(clearHeader.includes("portal_session="));
+    assert.ok(clearHeader.includes('Max-Age=0'));
+    assert.ok(clearHeader.includes('portal_session='));
   });
 });

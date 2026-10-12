@@ -14,18 +14,82 @@
 
 import { fixedCompensationPence, statutoryInterestPence } from './statutory-interest';
 import { diffDays } from './escalation';
-import { verifySessionToken } from './portal-auth';
-import { sendDebtorCommunication } from './email';
+import { verifySessionForClient } from './portal-auth';
+import { headerSafe, sendDebtorCommunication } from './email';
 
 export const SENDER_NAME = 'Invoice Rescue';
 export const LOCKED_SENDER_EMAIL = 'hello@invoicerescue.co.uk';
+
+/** How long an approval holds a draft while its email is being dispatched. */
+const DISPATCH_LEASE_SECONDS = 5 * 60;
 
 export const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // Responses carry per-client or per-operator data; shared caches must never keep them.
+  'Cache-Control': 'no-store',
+  // Every response from this module is JSON or a bare 303, so a locked-down CSP breaks nothing.
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Content-Security-Policy':
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self' https://billing.stripe.com; frame-ancestors 'none'; base-uri 'none'",
 };
+
+/**
+ * Parses ?client_id=. Returns null when absent/empty, NaN when malformed (callers answer 400 —
+ * Number('abc') used to slip through as NaN and silently match nothing).
+ */
+function queryClientId(request: Request): number | null {
+  const raw = new URL(request.url).searchParams.get('client_id');
+  if (!raw) return null;
+  if (!/^[1-9]\d*$/.test(raw)) return NaN;
+  const id = Number(raw);
+  // Digits-only can still exceed 2^53 and round to a different id — reject rather than misbind.
+  return Number.isSafeInteger(id) ? id : NaN;
+}
+
+function invalidClientIdResponse(): Response {
+  return Response.json(
+    { ok: false, error: 'Invalid client_id.' },
+    { status: 400, headers: SECURITY_HEADERS }
+  );
+}
+
+/** Mirrors integrations/webhooks.ts timingSafeEqual: no early exit on the first differing char. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/** Decodes the password half of a Basic credential; null on malformed base64 (atob throws). */
+function basicAuthPassword(authHeader: string): string | null {
+  const match = /^Basic (.+)$/.exec(authHeader);
+  if (!match) return null;
+  try {
+    const decoded = atob(match[1].trim());
+    return decoded.slice(decoded.indexOf(':') + 1);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Audit-trail label for chase_log.reviewed_by. Only admin (operator) actions are attributed to
+ * OPERATOR_NAME; a client approving/skipping in their own portal is recorded as themselves.
+ */
+function reviewerLabel(
+  auth: AuthContext,
+  env: Env,
+  client: { contact_name: string | null; company_name: string }
+): string {
+  if (auth.isAdmin) return env.OPERATOR_NAME || 'Tibor Rames';
+  return `${client.contact_name?.trim() || client.company_name} (client)`;
+}
 
 export interface AuthContext {
   isAdmin: boolean;
@@ -43,18 +107,18 @@ export async function resolveAuth(
   env: Env
 ): Promise<{ auth: AuthContext | null; errorResponse: Response | null }> {
   const authHeader = request.headers.get('Authorization');
+  const queryCid = queryClientId(request);
 
   // 1. Check HTTP Basic Auth (Admin)
   if (authHeader?.startsWith('Basic ')) {
-    const match = /^Basic (.+)$/.exec(authHeader);
-    const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(':') + 1) : null;
-    if (password === env.ADMIN_SECRET) {
-      const url = new URL(request.url);
-      const queryCid = url.searchParams.get('client_id');
+    const password = basicAuthPassword(authHeader);
+    // Fail closed on an unset ADMIN_SECRET rather than accepting an empty password.
+    if (password !== null && env.ADMIN_SECRET && timingSafeEqual(password, env.ADMIN_SECRET)) {
+      if (Number.isNaN(queryCid)) return { auth: null, errorResponse: invalidClientIdResponse() };
       return {
         auth: {
           isAdmin: true,
-          clientId: queryCid ? Number(queryCid) : null,
+          clientId: queryCid,
         },
         errorResponse: null,
       };
@@ -80,8 +144,9 @@ export async function resolveAuth(
   }
 
   if (token) {
-    const cid = await verifySessionToken(token, env.PORTAL_SESSION_SECRET);
+    const cid = await verifySessionForClient(token, env);
     if (cid !== null) {
+      if (Number.isNaN(queryCid)) return { auth: null, errorResponse: invalidClientIdResponse() };
       return {
         auth: {
           isAdmin: false,
@@ -111,8 +176,7 @@ export async function resolvePortalClientId(
     return { clientId: null, errorResponse };
   }
 
-  const url = new URL(request.url);
-  const queryCid = url.searchParams.get('client_id');
+  const queryCid = queryClientId(request); // already validated (non-NaN) by resolveAuth
 
   if (!auth) {
     return {
@@ -126,7 +190,7 @@ export async function resolvePortalClientId(
 
   if (!auth.isAdmin) {
     // Authenticated client: strictly isolate tenant
-    if (queryCid && Number(queryCid) !== auth.clientId) {
+    if (queryCid !== null && queryCid !== auth.clientId) {
       return {
         clientId: null,
         errorResponse: Response.json(
@@ -138,7 +202,7 @@ export async function resolvePortalClientId(
     return { clientId: auth.clientId, errorResponse: null };
   }
 
-  if (queryCid) return { clientId: Number(queryCid), errorResponse: null };
+  if (queryCid !== null) return { clientId: queryCid, errorResponse: null };
 
   // Admin without an explicit client_id: default to the first active client.
   const activeClient = await env.DB.prepare(
@@ -222,7 +286,7 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
       {
         ok: true,
         clientId: null,
-        companyName: 'Demo Client',
+        companyName: 'All clients', // admin view without ?client_id — no single tenant to name
         plan: 'foundation',
         metrics: {
           totalOverduePence: 0,
@@ -615,11 +679,10 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
   }
 
   const boeBaseRate = Number(env.BOE_BASE_RATE_PERCENT || '3.75');
-  const queryParamCid = new URL(request.url).searchParams.get('client_id');
 
-  // Determine clientId scope:
-  // If client session, lock to auth.clientId. If admin, optionally filter by queryParamCid.
-  const targetCid = !auth.isAdmin ? auth.clientId : queryParamCid ? Number(queryParamCid) : null;
+  // Determine clientId scope: a client session is locked to its own id; for admin, resolveAuth
+  // has already set auth.clientId from a validated ?client_id (or null = all clients).
+  const targetCid = auth.clientId;
 
   let sql = `
     SELECT
@@ -740,9 +803,9 @@ export async function handleApproveDraft(
   }
 
   const row = await env.DB.prepare(
-    `SELECT cl.id, cl.body, cl.subject, cl.status, cl.step, cl.invoice_id,
+    `SELECT cl.id, cl.body, cl.subject, cl.status, cl.step, cl.invoice_id, cl.sent_at,
             i.debtor_email, i.debtor_name, i.invoice_number, i.client_id,
-            c.company_name
+            c.company_name, c.contact_name
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
      JOIN clients c ON c.id = i.client_id
@@ -756,11 +819,13 @@ export async function handleApproveDraft(
       status: string;
       step: number;
       invoice_id: number;
+      sent_at: string;
       debtor_email: string | null;
       debtor_name: string;
       invoice_number: string;
       client_id: number;
       company_name: string;
+      contact_name: string | null;
     }>();
 
   if (!row || row.status !== 'draft') {
@@ -814,22 +879,48 @@ export async function handleApproveDraft(
     }
   }
 
+  // Take a short dispatch lease before sending: the conditional UPDATE is atomic, so of two
+  // concurrent approvals only one gets changes === 1 and sends (check-then-send double-sent).
+  // The row stays 'draft' until delivery succeeds — marking it 'sent' up front left a false
+  // audit record if the Worker died mid-send. An expired lease makes the draft approvable again.
+  const reviewerName = reviewerLabel(auth, env, row);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const claim = await env.DB.prepare(
+    `UPDATE chase_log
+     SET dispatch_lease_until = ?2
+     WHERE id = ?1 AND status = 'draft'
+       AND (dispatch_lease_until IS NULL OR dispatch_lease_until < ?3)`
+  )
+    .bind(draftId, nowSeconds + DISPATCH_LEASE_SECONDS, nowSeconds)
+    .run();
+
+  if (claim.meta.changes === 0) {
+    return Response.json(
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
+    );
+  }
+
   // Dispatch outbound debtor email locked to hello@invoicerescue.co.uk
   const sent = await sendDebtorCommunication(
     env,
     row.debtor_email,
-    row.subject ?? `Re: Invoice ${row.invoice_number}`,
+    headerSafe(row.subject ?? `Re: Invoice ${row.invoice_number}`),
     body
   );
 
   if (!sent) {
+    // Release the lease so the draft is immediately approvable again, unchanged.
+    await env.DB.prepare(
+      `UPDATE chase_log SET dispatch_lease_until = NULL WHERE id = ?1 AND status = 'draft'`
+    )
+      .bind(draftId)
+      .run();
     return Response.json(
       { ok: false, error: 'Failed to dispatch email communication to debtor.' },
       { status: 500, headers: SECURITY_HEADERS }
     );
   }
-
-  const reviewerName = env.OPERATOR_NAME || 'Tibor Rames';
 
   await env.DB.prepare(
     `UPDATE chase_log
@@ -838,7 +929,8 @@ export async function handleApproveDraft(
          outcome = 'sent',
          sent_at = datetime('now'),
          reviewed_at = datetime('now'),
-         reviewed_by = ?3
+         reviewed_by = ?3,
+         dispatch_lease_until = NULL
      WHERE id = ?1 AND status = 'draft'`
   )
     .bind(draftId, body, reviewerName)
@@ -887,13 +979,20 @@ export async function handleSkipDraft(
   }
 
   const row = await env.DB.prepare(
-    `SELECT cl.id, cl.status, i.client_id
+    `SELECT cl.id, cl.status, i.client_id, c.company_name, c.contact_name
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
+     JOIN clients c ON c.id = i.client_id
      WHERE cl.id = ?1`
   )
     .bind(draftId)
-    .first<{ id: number; status: string; client_id: number }>();
+    .first<{
+      id: number;
+      status: string;
+      client_id: number;
+      company_name: string;
+      contact_name: string | null;
+    }>();
 
   if (!row) {
     return Response.json(
@@ -909,17 +1008,23 @@ export async function handleSkipDraft(
     );
   }
 
-  if (row.status === 'draft') {
-    const reviewerName = env.OPERATOR_NAME || 'Tibor Rames';
-    await env.DB.prepare(
-      `UPDATE chase_log
-       SET status = 'skipped',
-           reviewed_at = datetime('now'),
-           reviewed_by = ?2
-       WHERE id = ?1 AND status = 'draft'`
-    )
-      .bind(draftId, reviewerName)
-      .run();
+  // Conditional on status = 'draft': skipping an already sent/skipped row used to report
+  // 200 "skipped" while the DB kept 'sent' — now it's an explicit 409.
+  const skip = await env.DB.prepare(
+    `UPDATE chase_log
+     SET status = 'skipped',
+         reviewed_at = datetime('now'),
+         reviewed_by = ?2
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, reviewerLabel(auth, env, row))
+    .run();
+
+  if (skip.meta.changes === 0) {
+    return Response.json(
+      { ok: false, error: 'Draft already reviewed.' },
+      { status: 409, headers: SECURITY_HEADERS }
+    );
   }
 
   const accepts = request.headers.get('Accept') ?? '';

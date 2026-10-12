@@ -920,45 +920,23 @@ describe('Milestone M3 Empirical Challenge Suite (Challenger 2)', () => {
       assert.strictEqual(result.data, null);
     });
 
-    test('4.4 Frontend dashboard.js fallback mock datasets provide valid data for all 3 views', () => {
-      // Read dashboard.js content to verify fallback default data structures
+    test('4.4 Frontend dashboard.js never substitutes fabricated demo data for real client data', () => {
+      // Regression: the dashboard used to fall back to hardcoded demo invoices/drafts ("Hartley & Co Ltd",
+      // "Apex Studio Ltd") when the API failed, showing a client fake data as if it were theirs.
       const dashboardJsPath = join(process.cwd(), 'frontend', 'dashboard', 'js', 'dashboard.js');
       const content = readFileSync(dashboardJsPath, 'utf-8');
 
-      // Verify DEFAULT_INVOICES is present and complete
-      assert.ok(
-        content.includes('const DEFAULT_INVOICES = ['),
-        'DEFAULT_INVOICES should be defined'
-      );
-      assert.ok(
-        content.includes('Hartley & Co Ltd'),
-        'Hartley & Co Ltd should be in mock invoices'
-      );
-      assert.ok(
-        content.includes('Meridian Build Partners'),
-        'Meridian Build Partners should be in mock invoices'
-      );
-
-      // Verify DEFAULT_DRAFTS is present with locked sender and financial fields
-      assert.ok(content.includes('const DEFAULT_DRAFTS = ['), 'DEFAULT_DRAFTS should be defined');
-      assert.ok(
-        content.includes('locked_sender: "hello@invoicerescue.co.uk"'),
-        'Drafts must have locked sender'
-      );
-      assert.ok(
-        content.includes('computeFixedCompensationPence'),
-        'Must have client-side compensation math'
-      );
-      assert.ok(
-        content.includes('computeStatutoryInterestPence'),
-        'Must have client-side interest math'
-      );
-
-      // Verify DEFAULT_ACTIVITIES is present
-      assert.ok(
-        content.includes('const DEFAULT_ACTIVITIES = ['),
-        'DEFAULT_ACTIVITIES should be defined'
-      );
+      for (const marker of [
+        'DEFAULT_INVOICES',
+        'DEFAULT_DRAFTS',
+        'Hartley & Co Ltd',
+        'Apex Studio Ltd',
+      ]) {
+        assert.ok(
+          !content.includes(marker),
+          `dashboard.js must not contain demo data marker: ${marker}`
+        );
+      }
     });
 
     test('4.5 Simulated offline frontend state allows editing, approving, and skipping drafts locally without blank screen', () => {
@@ -1073,16 +1051,18 @@ describe('Milestone M3 Empirical Challenge Suite (Challenger 2)', () => {
 
       // Verify approveDraft checks res.ok and guards non-404 errors
       assert.ok(
-        content.includes('res && !res.ok && res.status !== 404'),
-        'approveDraft must check res && !res.ok && res.status !== 404'
+        /\/\/ Only drop the card once the server confirms the send\.\s+if \(!res\.ok\) \{/.test(
+          content
+        ),
+        'approveDraft must keep the card on any non-OK response'
       );
       assert.ok(
-        content.includes('btn.innerHTML = "Approve & Send"'),
+        content.includes('btn.innerHTML = "Approve &amp; Send"'),
         'approveDraft must restore button innerHTML on non-404 error'
       );
       assert.ok(
         content.includes(
-          'showToast(res.data?.error || "Failed to approve draft: " + res.status, "error")'
+          'showToast(res.data?.error || `Failed to approve draft (${res.status || "network error"})`, "error")'
         ),
         'approveDraft must trigger error toast with server error or status code'
       );

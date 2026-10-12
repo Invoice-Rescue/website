@@ -1374,7 +1374,7 @@ describe('Tier 2: Boundary and Corner Cases', () => {
   // F18: Boundary Review Queue Approve & Defer
   // =========================================================================
   describe('F18: Boundary Review Queue Approve & Defer', () => {
-    test('T2.F18.1: Skipping already skipped draft is idempotent and executes cleanly', async () => {
+    test('T2.F18.1: Skipping already skipped draft returns 409 (already reviewed)', async () => {
       const { env, db } = createTestEnv();
       await db.rawSqlite.exec(`
         INSERT INTO clients (id, company_name, contact_email) VALUES (1, 'C1', 'c1@test.com');
@@ -1392,7 +1392,7 @@ describe('Tier 2: Boundary and Corner Cases', () => {
         },
       });
       const resp = await worker.fetch(req, env);
-      assert.strictEqual(resp.status, 200);
+      assert.strictEqual(resp.status, 409);
     });
 
     test('T2.F18.2: Approving draft for non-existent chase ID returns 404', async () => {

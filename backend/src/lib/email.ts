@@ -8,23 +8,31 @@
  * Enforces RFC deliverability headers, locked sender constraints, and resilient error boundaries.
  */
 
-export const SENDER_NAME = "Invoice Rescue";
-export const LOCKED_SENDER_EMAIL = "hello@invoicerescue.co.uk";
-export const OPERATOR_INBOX_EMAIL = "tiborcc2@gmail.com";
+export const SENDER_NAME = 'Invoice Rescue';
+export const LOCKED_SENDER_EMAIL = 'hello@invoicerescue.co.uk';
+export const OPERATOR_INBOX_EMAIL = 'tiborcc2@gmail.com';
 
 /**
  * Validates basic RFC 5322 email address format.
  */
 export function isValidEmail(email: string): boolean {
-  if (!email || typeof email !== "string") return false;
+  if (!email || typeof email !== 'string') return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/**
+ * Collapses CR/LF runs to a single space so untrusted values (invoice numbers, debtor names
+ * imported from CSV/integrations) can't inject extra headers when interpolated into a subject.
+ */
+export function headerSafe(s: string): string {
+  return s.replace(/[\r\n]+/g, ' ');
 }
 
 /**
  * Generates standard locked sign-off for debtor communications.
  */
 export function formatDebtorSignoff(clientBusinessName?: string): string {
-  const clientName = clientBusinessName?.trim() || "our client";
+  const clientName = clientBusinessName?.trim() || 'our client';
   return `Tibor Rames\nInvoice Rescue — acting on behalf of ${clientName}\n${LOCKED_SENDER_EMAIL}`;
 }
 
@@ -44,10 +52,10 @@ export interface DebtorCommunicationOptions {
 export async function sendOperatorNotification(
   env: Env,
   subject: string,
-  body: string,
+  body: string
 ): Promise<boolean> {
-  if (!env.NOTIFY || typeof env.NOTIFY.send !== "function") {
-    console.error("sendOperatorNotification: env.NOTIFY binding unavailable");
+  if (!env.NOTIFY || typeof env.NOTIFY.send !== 'function') {
+    console.error('sendOperatorNotification: env.NOTIFY binding unavailable');
     return false;
   }
 
@@ -61,14 +69,14 @@ export async function sendOperatorNotification(
       subject,
       text: body,
       headers: {
-        "Auto-Submitted": "auto-generated",
-        "Message-ID": messageId,
-        "Date": dateHeader,
+        'Auto-Submitted': 'auto-generated',
+        'Message-ID': messageId,
+        Date: dateHeader,
       },
     });
     return true;
   } catch (err) {
-    console.error("sendOperatorNotification failed:", err);
+    console.error('sendOperatorNotification failed:', err);
     return false;
   }
 }
@@ -89,21 +97,21 @@ export async function sendDebtorCommunication(
   to: string,
   subject: string,
   body: string,
-  options?: DebtorCommunicationOptions,
+  options?: DebtorCommunicationOptions
 ): Promise<boolean> {
   if (!to || !isValidEmail(to)) {
     console.error(`sendDebtorCommunication: invalid recipient email address: ${to}`);
     return false;
   }
 
-  if (!env.SEND || typeof env.SEND.send !== "function") {
-    console.error("sendDebtorCommunication: env.SEND binding unavailable");
+  if (!env.SEND || typeof env.SEND.send !== 'function') {
+    console.error('sendDebtorCommunication: env.SEND binding unavailable');
     return false;
   }
 
   try {
     let messageText = body.trim();
-    if (options?.clientBusinessName && !messageText.includes("Tibor Rames")) {
+    if (options?.clientBusinessName && !messageText.includes('Tibor Rames')) {
       const signoff = formatDebtorSignoff(options.clientBusinessName);
       messageText = `${messageText}\n\n${signoff}`;
     }
@@ -119,15 +127,15 @@ export async function sendDebtorCommunication(
       subject,
       text: messageText,
       headers: {
-        "Auto-Submitted": "auto-generated",
-        "Message-ID": messageId,
-        "Date": dateHeader,
-        "Reply-To": replyToEmail,
+        'Auto-Submitted': 'auto-generated',
+        'Message-ID': messageId,
+        Date: dateHeader,
+        'Reply-To': replyToEmail,
       },
     });
     return true;
   } catch (err) {
-    console.error("sendDebtorCommunication failed:", err);
+    console.error('sendDebtorCommunication failed:', err);
     return false;
   }
 }
