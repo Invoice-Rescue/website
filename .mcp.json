@@ -3,7 +3,7 @@
     "claude-flow": {
       "description": "Claude Flow orchestration and memory mesh server",
       "command": "npx",
-      "args": ["ruflo@latest", "mcp", "start"],
+      "args": ["ruflo@3.56.9", "mcp", "start"],
       "env": {
         "npm_config_update_notifier": "false",
         "CLAUDE_FLOW_MODE": "v3",
