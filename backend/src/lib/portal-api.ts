@@ -25,6 +25,8 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // Responses carry per-client or per-operator data; shared caches must never keep them.
+  'Cache-Control': 'no-store',
   // Every response from this module is JSON or a bare 303, so a locked-down CSP breaks nothing.
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'Content-Security-Policy':
