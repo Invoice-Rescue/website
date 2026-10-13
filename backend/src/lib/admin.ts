@@ -38,7 +38,7 @@ export function renderReviewQueue(drafts: DraftRow[]): string {
 @media (max-width:700px){body{margin:1rem}thead tr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}table,tbody,tr,td{display:block;width:100%;box-sizing:border-box}tr{border:1px solid #ccc;margin-bottom:1rem}td{border:0;border-top:1px solid #eee}td:first-child{border-top:0}td[data-label]::before{content:attr(data-label) ": " / "";font-weight:600}textarea{min-width:0}}</style>
 </head><body>
 <h1>Review queue</h1>
-<p><strong>Gated by a single shared secret (Basic Auth), not real auth.</strong> Put Cloudflare Access in front of <code>/admin</code> (and <code>/api/chase/*</code>) before relying on this past 1-2 clients — see docs/credit-control-system-design.md §4.4.</p>
+<p><strong>Protected by Cloudflare Access in production, with a shared-secret Basic Auth check behind it.</strong> Approve/Skip here go through <code>/api/chase/*</code>, which Access also covers.</p>
 <table role="table">
 <thead role="rowgroup"><tr role="row"><th role="columnheader">Client</th><th role="columnheader">Debtor</th><th role="columnheader">Invoice</th><th role="columnheader">Step</th><th role="columnheader">Message</th><th role="columnheader"><span class="visually-hidden">Actions</span></th></tr></thead>
 <tbody role="rowgroup">${rows || '<tr><td colspan="6">No drafts awaiting review.</td></tr>'}</tbody>
