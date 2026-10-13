@@ -51,10 +51,11 @@
  *
  * /admin, /api/chase/*, /api/clients, and the CSV import route are gated by
  * requireAdminAuth() — a single shared secret (ADMIN_SECRET) checked via HTTP
- * Basic Auth. This is a stopgap for the "I personally know every client"
- * stage, not real auth: no per-user identity, no rotation, no audit log. Put
- * Cloudflare Access in front of all of them before this scales past that
- * (docs/credit-control-system-design.md §4.4).
+ * Basic Auth. In production Cloudflare Access already sits in front of /admin,
+ * /api/chase/* and /api/clients* (Zero Trust dashboard, not this repo), so
+ * Basic Auth is the second layer there. /api/admin/* is NOT behind Access —
+ * the client dashboard uses it with client sessions — so on those paths
+ * Basic Auth is the only admin gate. See CLAUDE.md "Known gaps".
  *
  * No external dependencies — the Stripe integration is plain fetch() calls
  * (backend/src/lib/stripe.ts), not the stripe-node SDK. ES modules format.
@@ -262,9 +263,9 @@ async function serveDashboardAsset(request: Request, env: Env): Promise<Response
 // to attach a custom Authorization header to a form submission. Basic Auth is
 // the one scheme browsers natively prompt for and then re-send automatically
 // on every later request to the origin, so the review-queue forms keep
-// working after the first login. Swap this for something real (Cloudflare
-// Access, or actual sessions) once you're past the "I personally know every
-// client" stage — but ship THIS first, not nothing.
+// working after the first login. Cloudflare Access now fronts most admin
+// routes in production (see the file header); this check stays as the inner
+// layer, and the only one on /api/admin/*.
 function requireAdminAuth(request: Request, env: Env): Response | null {
   const password = readBasicAuthPassword(request);
 
