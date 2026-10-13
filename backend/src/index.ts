@@ -1036,13 +1036,14 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
   // 2. Out-of-order delivery protection for subscription updates
   if (
     customerId &&
-    (event.type === 'customer.subscription.updated' ||
+    (event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.updated' ||
       event.type === 'customer.subscription.deleted')
   ) {
     const newer = await env.DB.prepare(
       `SELECT id FROM webhook_events 
        WHERE customer_id = ?1 
-         AND event_type IN ('customer.subscription.updated', 'customer.subscription.deleted')
+         AND event_type IN ('customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted')
          AND created_at_timestamp > ?2`
     )
       .bind(customerId, createdTimestamp)
@@ -1064,7 +1065,11 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     await env.DB.prepare(`UPDATE clients SET status = 'churned' WHERE stripe_customer_id = ?1`)
       .bind(customerId)
       .run();
-  } else if (customerId && event.type === 'customer.subscription.updated') {
+  } else if (
+    customerId &&
+    (event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.updated')
+  ) {
     const subStatus = event.data.object.status;
     const newStatus =
       subStatus === 'active' || subStatus === 'trialing'

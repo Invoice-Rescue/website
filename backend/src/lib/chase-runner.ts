@@ -97,12 +97,14 @@ export async function runOverdueDetection(env: Env, now?: Date): Promise<ChaseRu
               CAST(julianday(?1) - julianday(i.due_date) AS INTEGER) AS days_overdue,
               c.company_name, c.voice_notes
        FROM invoices i JOIN clients c ON c.id = i.client_id
-       WHERE i.status = 'overdue' AND i.due_date < date(?1)`
+       WHERE i.status = 'overdue' AND i.due_date < date(?1)
+         AND c.status IN ('onboarding', 'active')`
     : `SELECT i.id, i.client_id, i.debtor_name, i.debtor_email, i.invoice_number, i.amount_pence, i.currency, i.due_date,
               CAST(julianday('now') - julianday(i.due_date) AS INTEGER) AS days_overdue,
               c.company_name, c.voice_notes
        FROM invoices i JOIN clients c ON c.id = i.client_id
-       WHERE i.status = 'overdue' AND i.due_date < date('now')`;
+       WHERE i.status = 'overdue' AND i.due_date < date('now')
+         AND c.status IN ('onboarding', 'active')`;
 
   const stmt = now ? env.DB.prepare(query).bind(now.toISOString()) : env.DB.prepare(query);
 
