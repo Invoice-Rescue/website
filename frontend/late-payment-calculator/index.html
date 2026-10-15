@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Late Payment Interest Calculator (UK) — Invoice Rescue</title>
+<meta name="description" content="Work out the statutory interest and fixed compensation you can claim on overdue UK business invoices under the Late Payment of Commercial Debts (Interest) Act 1998. Free, runs in your browser.">
+<link rel="canonical" href="https://invoicerescue.co.uk/late-payment-calculator/">
+<meta property="og:title" content="Late Payment Interest Calculator (UK)">
+<meta property="og:description" content="Statutory interest and fixed compensation on overdue B2B invoices, worked out to the penny.">
+<meta property="og:url" content="https://invoicerescue.co.uk/late-payment-calculator/">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#FBFAF7;--card:#FFFFFF;--ink:#171B21;--muted:#5B6470;--rule:#DDD9CE;--green:#1E7A4E;--green-dark:#175F3D;--owed:#8A5300;--warn:#A4262C}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.6;font-size:17px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px}
+  header{padding:28px 0;border-bottom:1px solid var(--rule)}
+  .brand{font-family:Fraunces,serif;font-size:22px;font-weight:600;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+  .brand span{color:var(--green)}
+  main{padding:44px 0 64px;display:grid;gap:28px}
+  .eyebrow{font:500 12px/1 "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--green)}
+  h1{font-family:Fraunces,serif;font-weight:600;font-size:clamp(30px,5vw,44px);line-height:1.1;letter-spacing:-.02em;margin:10px 0 12px;text-wrap:balance}
+  h2{font-family:Fraunces,serif;font-weight:600;font-size:21px;margin-bottom:10px}
+  .lede{color:var(--muted);max-width:62ch}
+  .panel{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:22px}
+  .note{font-size:13.5px;color:var(--muted)}
+  .row{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:10px;align-items:end;padding:14px 0;border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);min-width:0}
+  input{font:15px "IBM Plex Sans",system-ui,sans-serif;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:9px 10px;width:100%;min-width:0}
+  input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+  .result{grid-column:1/-1;font:13px/1.5 "IBM Plex Mono",monospace;color:var(--muted);font-variant-numeric:tabular-nums}
+  .result b{color:var(--owed);font-weight:500}
+  .result .err{color:var(--warn)}
+  button{font:600 14px "IBM Plex Sans",system-ui,sans-serif;border-radius:6px;padding:9px 14px;cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--ink)}
+  button.primary{background:var(--green);border-color:var(--green);color:#fff}
+  button.primary:hover{background:var(--green-dark)}
+  .remove{color:var(--muted);padding:9px 11px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .total{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .total div{display:grid;gap:2px}
+  .total span{font-size:13px;color:var(--muted)}
+  .total strong{font:500 clamp(22px,4vw,30px)/1.2 "IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  .total .grand strong{color:var(--owed)}
+  pre{white-space:pre-wrap;font:13px/1.65 "IBM Plex Mono",monospace;background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:14px;overflow-x:auto}
+  ul.rules{margin:0 0 16px 20px;font-size:15px}
+  ul.rules li{margin-bottom:6px}
+  .tablewrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font:13px "IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--rule)}
+  th{font-family:"IBM Plex Sans",sans-serif;color:var(--muted);font-weight:600}
+  a{color:var(--green-dark)}
+  .cta{border-left:3px solid var(--green);padding-left:16px}
+  footer{border-top:1px solid var(--rule);padding:32px 0 48px;font-size:13.5px;color:var(--muted)}
+  footer a{color:var(--muted)}
+  @media (max-width:640px){
+    .row{grid-template-columns:1fr 1fr}
+    .row label:first-child{grid-column:1/-1}
+    .total{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a class="brand" href="/">Invoice<span>Rescue</span></a></header>
+  <main>
+    <section>
+      <div class="eyebrow">Late Payment of Commercial Debts (Interest) Act 1998</div>
+      <h1>Late payment interest calculator</h1>
+      <p class="lede">UK businesses can charge statutory interest at 8% over the Bank of England base rate on overdue business-to-business invoices, plus a fixed compensation sum for each one. Add your overdue invoices to see what you can claim. Nothing you type here leaves your browser.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="inv-h">
+      <h2 id="inv-h">Your overdue invoices</h2>
+      <p class="note">The rows below are examples. Replace them with your own.</p>
+      <div id="rows"></div>
+      <div class="actions"><button type="button" id="add">Add invoice</button></div>
+    </section>
+
+    <section class="panel" aria-labelledby="tot-h">
+      <h2 id="tot-h">You can claim</h2>
+      <div class="total">
+        <div><span>Statutory interest</span><strong id="t-int">£0.00</strong></div>
+        <div><span>Fixed compensation</span><strong id="t-comp">£0.00</strong></div>
+        <div class="grand"><span>Total on top of the invoices</span><strong id="t-all">£0.00</strong></div>
+      </div>
+      <p class="note" id="t-note"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="letter-h">
+      <h2 id="letter-h">Claim wording</h2>
+      <p class="note">Only send this if your contract doesn't set its own late-payment interest rate and the invoice isn't disputed. Send it as a separate invoice that references the original, and edit it before sending.</p>
+      <pre id="letter"></pre>
+      <div class="actions"><button type="button" class="primary" id="copy">Copy claim text</button></div>
+    </section>
+
+    <section class="panel" aria-labelledby="rules-h">
+      <h2 id="rules-h">How the figure is worked out</h2>
+      <ul class="rules">
+        <li>Interest starts the day after the payment due date. If your contract set no date, payment is late 30 days after the customer gets the invoice, or 30 days after you deliver the goods or service if that is later.</li>
+        <li>The rate is fixed for the whole debt by when it went overdue: the base rate on 31 December for debts overdue January to June, and on 30 June for debts overdue July to December.</li>
+        <li>Interest is simple interest: invoice total (including VAT) × annual rate × days late ÷ 365.</li>
+        <li>Fixed compensation per invoice: £40 under £1,000, £70 from £1,000 to £9,999.99, £100 at £10,000 or more.</li>
+        <li>It doesn't apply to consumers, to invoices under genuine dispute, or where your contract sets its own interest rate for late payment.</li>
+      </ul>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Debt overdue during</th><th>Reference rate</th><th>Statutory rate</th></tr></thead>
+          <tbody id="rates"></tbody>
+        </table>
+      </div>
+      <p class="note" style="margin-top:12px">Reference rates from the <a href="https://www.bankofengland.co.uk/boeapps/database/Bank-Rate.asp" rel="noopener">Bank of England Bank Rate history</a>, last checked <span id="checked"></span>. Rule: <a href="https://www.legislation.gov.uk/uksi/2002/1675/article/4/made" rel="noopener">SI 2002/1675, article 4</a>. This is an arithmetic estimate, not legal advice.</p>
+    </section>
+
+    <section class="cta">
+      <p>Would rather not send the letter yourself? Invoice Rescue chases overdue invoices in your name, and a person reads every message before it goes. <a href="/#lead-form">Request a free audit</a>.</p>
+    </section>
+  </main>
+  <footer>
+    Invoice Rescue · Operated by Tibor Rames, 14 Cropthorne Close, Redditch, B98 7SJ, United Kingdom · invoicerescue.co.uk · hello@invoicerescue.co.uk<br>
+    We are a credit-control service, not a debt collection agency or a law firm.<br>
+    <a href="/">Home</a> · <a href="/compare/">Compare</a> · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a>
+  </footer>
+</div>
+
+<script type="module">
+import { REF_RATES, RATES_CHECKED, calcInvoice, toUTC } from "./calc.js";
+
+const DAY_MS = 86_400_000;
+const gbp = n => "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const isoMinus = days => new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
+const longDate = iso => new Date(toUTC(iso)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+const rowsEl = document.getElementById("rows");
+let uid = 0;
+
+function addRow(ref = "", amount = "", due = "", paid = "") {
+  const id = ++uid;
+  const div = document.createElement("div");
+  div.className = "row";
+  div.innerHTML = `
+    <label for="ref${id}">Invoice ref<input id="ref${id}" placeholder="INV-0042"></label>
+    <label for="amt${id}">Total inc. VAT (£)<input id="amt${id}" type="number" min="0" step="0.01" inputmode="decimal"></label>
+    <label for="due${id}">Due date<input id="due${id}" type="date"></label>
+    <label for="paid${id}">Paid on (blank = today)<input id="paid${id}" type="date"></label>
+    <button type="button" class="remove" aria-label="Remove invoice">✕</button>
+    <div class="result" aria-live="polite"></div>`;
+  // Set values as properties, not markup, so nothing user-shaped is ever parsed as HTML.
+  div.querySelector(`#ref${id}`).value = ref;
+  div.querySelector(`#amt${id}`).value = amount;
+  div.querySelector(`#due${id}`).value = due;
+  div.querySelector(`#paid${id}`).value = paid;
+  div.querySelector(".remove").addEventListener("click", () => { div.remove(); render(); });
+  div.addEventListener("input", render);
+  rowsEl.appendChild(div);
+}
+
+function render() {
+  let tInt = 0, tComp = 0, count = 0;
+  const lines = [];
+  rowsEl.querySelectorAll(".row").forEach(row => {
+    const [ref, amt, due, paid] = row.querySelectorAll("input");
+    const r = calcInvoice(parseFloat(amt.value), due.value, paid.value || todayISO());
+    const out = row.querySelector(".result");
+    if (r.error) { out.innerHTML = ""; const s = document.createElement("span"); s.className = "err"; s.textContent = r.error; out.append(s); return; }
+    count++; tInt += r.interest; tComp += r.comp;
+    out.innerHTML = `${r.days} days late at ${r.rate.toFixed(2)}% (base ${r.ref.toFixed(2)}% + 8%) → interest <b>${gbp(r.interest)}</b> + compensation <b>${gbp(r.comp)}</b>${paid.value ? "" : ` · grows ${gbp(r.daily)} a day`}`;
+    const name = ref.value.trim() || "unreferenced invoice";
+    lines.push(`- ${name}: ${gbp(parseFloat(amt.value))} due ${longDate(due.value)}, ${r.days} days late. Interest at ${r.rate.toFixed(2)}%: ${gbp(r.interest)}. Fixed compensation: ${gbp(r.comp)}.`);
+  });
+  document.getElementById("t-int").textContent = gbp(tInt);
+  document.getElementById("t-comp").textContent = gbp(tComp);
+  document.getElementById("t-all").textContent = gbp(tInt + tComp);
+  document.getElementById("t-note").textContent = count ? `Across ${count} invoice${count > 1 ? "s" : ""}, calculated to ${longDate(todayISO())} where no payment date is given.` : "";
+  document.getElementById("letter").textContent = count ?
+`Under the Late Payment of Commercial Debts (Interest) Act 1998, we are entitled to statutory interest and fixed compensation on the following overdue invoices:
+
+${lines.join("\n")}
+
+Total interest: ${gbp(tInt)}
+Total compensation: ${gbp(tComp)}
+Amount now claimed: ${gbp(tInt + tComp)}
+
+Interest continues to accrue daily on any invoice that remains unpaid. Please pay the amount claimed, together with any outstanding invoice balances, within 14 days.` : "Add an overdue invoice to generate the claim wording.";
+}
+
+document.getElementById("add").addEventListener("click", () => { addRow(); render(); });
+document.getElementById("copy").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  try { await navigator.clipboard.writeText(document.getElementById("letter").textContent); btn.textContent = "Copied"; }
+  catch { const r = document.createRange(); r.selectNodeContents(document.getElementById("letter")); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = "Selected, press Ctrl+C"; }
+  setTimeout(() => { btn.textContent = "Copy claim text"; }, 2000);
+});
+
+document.getElementById("rates").innerHTML = Object.entries(REF_RATES).reverse().map(([k, v]) => {
+  const [y, h] = k.split("-");
+  return `<tr><td>${h === "H1" ? "1 Jan – 30 Jun" : "1 Jul – 31 Dec"} ${y}</td><td>${v.toFixed(2)}%</td><td>${(v + 8).toFixed(2)}%</td></tr>`;
+}).join("");
+document.getElementById("checked").textContent = longDate(RATES_CHECKED);
+
+// Example rows, dated relative to today so they always read as overdue.
+addRow("EXAMPLE-101", "2400", isoMinus(74));
+addRow("EXAMPLE-102", "850", isoMinus(41));
+addRow("EXAMPLE-103", "12600", isoMinus(160), isoMinus(20));
+render();
+</script>
+</body>
+</html>
