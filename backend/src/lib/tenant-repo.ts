@@ -114,13 +114,25 @@ export function validateInvoiceInput(input: UpsertInvoiceInput): void {
   if (!input || typeof input !== 'object') {
     throw new InvalidInvoiceDataError('Invoice input must be a non-null object');
   }
-  if (!input.debtorName || typeof input.debtorName !== 'string' || input.debtorName.trim().length < 2) {
+  if (
+    !input.debtorName ||
+    typeof input.debtorName !== 'string' ||
+    input.debtorName.trim().length < 2
+  ) {
     throw new InvalidInvoiceDataError('debtorName must be at least 2 characters');
   }
-  if (!input.invoiceNumber || typeof input.invoiceNumber !== 'string' || input.invoiceNumber.trim().length < 1) {
+  if (
+    !input.invoiceNumber ||
+    typeof input.invoiceNumber !== 'string' ||
+    input.invoiceNumber.trim().length < 1
+  ) {
     throw new InvalidInvoiceDataError('invoiceNumber is required');
   }
-  if (typeof input.amountPence !== 'number' || !Number.isInteger(input.amountPence) || input.amountPence <= 0) {
+  if (
+    typeof input.amountPence !== 'number' ||
+    !Number.isInteger(input.amountPence) ||
+    input.amountPence <= 0
+  ) {
     throw new InvalidInvoiceDataError('amountPence must be a positive integer in pence');
   }
   if (!input.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate.trim())) {
@@ -144,17 +156,23 @@ export function validateInvoiceInput(input: UpsertInvoiceInput): void {
 /**
  * Retrieves all invoices strictly scoped to clientId.
  */
-export async function getTenantInvoices(db: D1Database, clientId: number): Promise<TenantInvoice[]> {
+export async function getTenantInvoices(
+  db: D1Database,
+  clientId: number
+): Promise<TenantInvoice[]> {
   validateClientId(clientId);
-  const rows = await db.prepare(
-    `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
+  const rows = await db
+    .prepare(
+      `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
             invoice_number AS invoiceNumber, amount_pence AS amountPence, currency,
             issued_date AS issuedDate, due_date AS dueDate, status, paid_date AS paidDate,
             created_at AS createdAt, external_id AS externalId, last_synced_at AS lastSyncedAt
      FROM invoices
      WHERE client_id = ?1
      ORDER BY due_date DESC`
-  ).bind(clientId).all<TenantInvoice>();
+    )
+    .bind(clientId)
+    .all<TenantInvoice>();
 
   return rows.results ?? [];
 }
@@ -170,14 +188,17 @@ export async function getTenantInvoiceByNumber(
   validateClientId(clientId);
   if (!invoiceNumber || typeof invoiceNumber !== 'string') return null;
 
-  return await db.prepare(
-    `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
+  return await db
+    .prepare(
+      `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
             invoice_number AS invoiceNumber, amount_pence AS amountPence, currency,
             issued_date AS issuedDate, due_date AS dueDate, status, paid_date AS paidDate,
             created_at AS createdAt, external_id AS externalId, last_synced_at AS lastSyncedAt
      FROM invoices
      WHERE client_id = ?1 AND invoice_number = ?2`
-  ).bind(clientId, invoiceNumber.trim()).first<TenantInvoice>();
+    )
+    .bind(clientId, invoiceNumber.trim())
+    .first<TenantInvoice>();
 }
 
 /**
@@ -191,14 +212,17 @@ export async function getTenantInvoiceById(
   validateClientId(clientId);
   validateIntegerId(invoiceId, 'invoiceId');
 
-  return await db.prepare(
-    `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
+  return await db
+    .prepare(
+      `SELECT id, client_id AS clientId, debtor_name AS debtorName, debtor_email AS debtorEmail,
             invoice_number AS invoiceNumber, amount_pence AS amountPence, currency,
             issued_date AS issuedDate, due_date AS dueDate, status, paid_date AS paidDate,
             created_at AS createdAt, external_id AS externalId, last_synced_at AS lastSyncedAt
      FROM invoices
      WHERE client_id = ?1 AND id = ?2`
-  ).bind(clientId, invoiceId).first<TenantInvoice>();
+    )
+    .bind(clientId, invoiceId)
+    .first<TenantInvoice>();
 }
 
 /**
@@ -220,12 +244,14 @@ export async function upsertTenantInvoice(
   const externalId = invoice.externalId ? invoice.externalId.trim() : null;
   const paidDate = invoice.paidDate ? invoice.paidDate.trim() : null;
 
-  const existing = await db.prepare(
-    `SELECT id, status FROM invoices WHERE client_id = ?1 AND invoice_number = ?2`
-  ).bind(clientId, invoice.invoiceNumber.trim()).first<{ id: number; status: string }>();
+  const existing = await db
+    .prepare(`SELECT id, status FROM invoices WHERE client_id = ?1 AND invoice_number = ?2`)
+    .bind(clientId, invoice.invoiceNumber.trim())
+    .first<{ id: number; status: string }>();
 
-  await db.prepare(
-    `INSERT INTO invoices (
+  await db
+    .prepare(
+      `INSERT INTO invoices (
        client_id, debtor_name, debtor_email, invoice_number,
        amount_pence, currency, issued_date, due_date, status,
        paid_date, external_id, last_synced_at
@@ -245,6 +271,10 @@ export async function upsertTenantInvoice(
        status = CASE 
          WHEN invoices.status = 'paid' THEN 'paid'
          WHEN excluded.status = 'paid' THEN 'paid'
+         -- A re-import/sync only knows "unpaid"; it must not reset a human-set workflow state
+         -- (disputed/promised/escalated) back into the chase cadence.
+         WHEN excluded.status = 'overdue'
+           AND invoices.status IN ('disputed', 'promised', 'escalated') THEN invoices.status
          ELSE excluded.status 
        END,
        paid_date = CASE 
@@ -253,19 +283,21 @@ export async function upsertTenantInvoice(
          ELSE invoices.paid_date 
        END,
        last_synced_at = datetime('now')`
-  ).bind(
-    clientId,
-    invoice.debtorName.trim(),
-    debtorEmail,
-    invoice.invoiceNumber.trim(),
-    invoice.amountPence,
-    currency,
-    issuedDate,
-    invoice.dueDate.trim(),
-    status,
-    externalId,
-    paidDate
-  ).run();
+    )
+    .bind(
+      clientId,
+      invoice.debtorName.trim(),
+      debtorEmail,
+      invoice.invoiceNumber.trim(),
+      invoice.amountPence,
+      currency,
+      issuedDate,
+      invoice.dueDate.trim(),
+      status,
+      externalId,
+      paidDate
+    )
+    .run();
 
   return {
     action: existing ? 'updated' : 'inserted',
@@ -292,10 +324,13 @@ export async function recordAccountingWebhook(
 
   const payloadString = typeof payload === 'string' ? payload : JSON.stringify(payload ?? {});
 
-  const res = await db.prepare(
-    `INSERT OR IGNORE INTO accounting_webhook_events (id, provider, event_type, payload, processed_at)
+  const res = await db
+    .prepare(
+      `INSERT OR IGNORE INTO accounting_webhook_events (id, provider, event_type, payload, processed_at)
      VALUES (?1, ?2, 'webhook_event', ?3, datetime('now'))`
-  ).bind(eventId.trim(), provider, payloadString).run();
+    )
+    .bind(eventId.trim(), provider, payloadString)
+    .run();
 
   return (res.meta?.changes ?? 0) > 0;
 }
@@ -309,15 +344,18 @@ export async function getAccountingConnection(
   provider: AccountingProvider
 ): Promise<TenantAccountingConnection | null> {
   validateClientId(clientId);
-  return await db.prepare(
-    `SELECT id, client_id AS clientId, provider, tenant_id AS tenantId,
+  return await db
+    .prepare(
+      `SELECT id, client_id AS clientId, provider, tenant_id AS tenantId,
             access_token_encrypted AS accessTokenEncrypted,
             refresh_token_encrypted AS refreshTokenEncrypted,
             expires_at AS expiresAt, last_synced_at AS lastSyncedAt,
             status, created_at AS createdAt
      FROM accounting_connections
      WHERE client_id = ?1 AND provider = ?2`
-  ).bind(clientId, provider).first<TenantAccountingConnection>();
+    )
+    .bind(clientId, provider)
+    .first<TenantAccountingConnection>();
 }
 
 /**
@@ -336,8 +374,9 @@ export async function upsertAccountingConnection(
   }
 ): Promise<void> {
   validateClientId(clientId);
-  await db.prepare(
-    `INSERT INTO accounting_connections (
+  await db
+    .prepare(
+      `INSERT INTO accounting_connections (
        client_id, provider, tenant_id, access_token_encrypted,
        refresh_token_encrypted, expires_at, last_synced_at, status, created_at
      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), ?7, datetime('now'))
@@ -348,15 +387,17 @@ export async function upsertAccountingConnection(
        expires_at = excluded.expires_at,
        last_synced_at = datetime('now'),
        status = excluded.status`
-  ).bind(
-    clientId,
-    conn.provider,
-    conn.tenantId ?? null,
-    conn.accessTokenEncrypted,
-    conn.refreshTokenEncrypted,
-    conn.expiresAt,
-    conn.status ?? 'active'
-  ).run();
+    )
+    .bind(
+      clientId,
+      conn.provider,
+      conn.tenantId ?? null,
+      conn.accessTokenEncrypted,
+      conn.refreshTokenEncrypted,
+      conn.expiresAt,
+      conn.status ?? 'active'
+    )
+    .run();
 }
 
 /**
@@ -369,11 +410,14 @@ export async function resolveClientByAccountingTenant(
 ): Promise<number | null> {
   if (!tenantId || typeof tenantId !== 'string') return null;
 
-  const row = await db.prepare(
-    `SELECT client_id AS clientId
+  const row = await db
+    .prepare(
+      `SELECT client_id AS clientId
      FROM accounting_connections
      WHERE provider = ?1 AND tenant_id = ?2 AND status = 'active'`
-  ).bind(provider, tenantId.trim()).first<{ clientId: number }>();
+    )
+    .bind(provider, tenantId.trim())
+    .first<{ clientId: number }>();
 
   return row ? row.clientId : null;
 }
@@ -381,10 +425,14 @@ export async function resolveClientByAccountingTenant(
 /**
  * Chase draft management scoped to tenant.
  */
-export async function getTenantDrafts(db: D1Database, clientId: number): Promise<TenantChaseDraft[]> {
+export async function getTenantDrafts(
+  db: D1Database,
+  clientId: number
+): Promise<TenantChaseDraft[]> {
   validateClientId(clientId);
-  const rows = await db.prepare(
-    `SELECT cl.id, cl.invoice_id AS invoiceId, cl.step, cl.channel, cl.subject, cl.body,
+  const rows = await db
+    .prepare(
+      `SELECT cl.id, cl.invoice_id AS invoiceId, cl.step, cl.channel, cl.subject, cl.body,
             cl.status, cl.sent_at AS sentAt, cl.reviewed_at AS reviewedAt, cl.reviewed_by AS reviewedBy,
             i.invoice_number AS invoiceNumber, i.debtor_name AS debtorName, i.debtor_email AS debtorEmail,
             i.amount_pence AS amountPence
@@ -392,7 +440,9 @@ export async function getTenantDrafts(db: D1Database, clientId: number): Promise
      JOIN invoices i ON i.id = cl.invoice_id
      WHERE i.client_id = ?1 AND cl.status = 'draft'
      ORDER BY cl.sent_at ASC`
-  ).bind(clientId).all<TenantChaseDraft>();
+    )
+    .bind(clientId)
+    .all<TenantChaseDraft>();
 
   return rows.results ?? [];
 }
@@ -410,8 +460,9 @@ export async function approveTenantDraft(
   validateClientId(clientId);
   validateIntegerId(draftId, 'draftId');
 
-  const res = await db.prepare(
-    `UPDATE chase_log
+  const res = await db
+    .prepare(
+      `UPDATE chase_log
      SET status = 'sent',
          body = ?3,
          outcome = 'sent',
@@ -420,7 +471,9 @@ export async function approveTenantDraft(
      WHERE id = ?1
        AND status = 'draft'
        AND invoice_id IN (SELECT id FROM invoices WHERE client_id = ?2)`
-  ).bind(draftId, clientId, editedBody, reviewedBy).run();
+    )
+    .bind(draftId, clientId, editedBody, reviewedBy)
+    .run();
 
   return (res.meta?.changes ?? 0) > 0;
 }
@@ -436,14 +489,17 @@ export async function skipTenantDraft(
   validateClientId(clientId);
   validateIntegerId(draftId, 'draftId');
 
-  const res = await db.prepare(
-    `UPDATE chase_log
+  const res = await db
+    .prepare(
+      `UPDATE chase_log
      SET status = 'skipped',
          reviewed_at = datetime('now')
      WHERE id = ?1
        AND status = 'draft'
        AND invoice_id IN (SELECT id FROM invoices WHERE client_id = ?2)`
-  ).bind(draftId, clientId).run();
+    )
+    .bind(draftId, clientId)
+    .run();
 
   return (res.meta?.changes ?? 0) > 0;
 }
@@ -476,7 +532,9 @@ export class TenantRepository {
     return upsertTenantInvoice(this.db, this.clientId, invoice);
   }
 
-  async getAccountingConnection(provider: AccountingProvider): Promise<TenantAccountingConnection | null> {
+  async getAccountingConnection(
+    provider: AccountingProvider
+  ): Promise<TenantAccountingConnection | null> {
     return getAccountingConnection(this.db, this.clientId, provider);
   }
 

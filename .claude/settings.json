@@ -42,6 +42,26 @@
             "timeout": 5000
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" post-edit",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__graft__|Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" tool-savings",
+            "timeout": 8000
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -51,6 +71,15 @@
             "type": "command",
             "command": "node .claude/helpers/hook-handler.cjs route",
             "timeout": 10000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" prompt",
+            "timeout": 15000
           }
         ]
       }
@@ -66,6 +95,15 @@
           {
             "type": "command",
             "command": "node .claude/helpers/auto-memory-hook.mjs import",
+            "timeout": 8000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" session-start",
             "timeout": 8000
           }
         ]
@@ -89,6 +127,15 @@
             "type": "command",
             "command": "node .claude/helpers/auto-memory-hook.mjs sync",
             "timeout": 10000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" stop",
+            "timeout": 8000
           }
         ]
       }
@@ -157,14 +204,14 @@
       }
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "node .claude/helpers/statusline.cjs"
-  },
   "permissions": {
     "allow": [
       "mcp__claude-flow__*",
-      "Bash(wrangler deploy --dry-run*)"
+      "Bash(wrangler deploy --dry-run*)",
+      "Bash(graft:*)",
+      "Bash(npx graft:*)",
+      "Bash(graft-dev:*)",
+      "Bash(node dist/cli.js:*)"
     ],
     "deny": [
       "Read(./.env)",
@@ -243,11 +290,7 @@
     },
     "daemon": {
       "autoStart": true,
-      "workers": [
-        "map",
-        "audit",
-        "optimize"
-      ],
+      "workers": ["map", "audit", "optimize"],
       "schedules": {
         "audit": {
           "interval": "4h",
@@ -262,11 +305,7 @@
     "learning": {
       "enabled": true,
       "autoTrain": true,
-      "patterns": [
-        "coordination",
-        "optimization",
-        "prediction"
-      ],
+      "patterns": ["coordination", "optimization", "prediction"],
       "retention": {
         "shortTerm": "24h",
         "longTerm": "30d"
@@ -288,5 +327,14 @@
       "cveCheck": true,
       "threatModel": true
     }
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\""
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs\""
+  },
+  "footerLinksRegexes": ["graft/[\\w./-]+\\.md"]
 }

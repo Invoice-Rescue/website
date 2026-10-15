@@ -12,20 +12,84 @@
  * Enforces strict tenant isolation, locked sender model, and zero external runtime dependencies.
  */
 
-import { fixedCompensationPence, statutoryInterestPence } from "./statutory-interest";
-import { diffDays } from "./escalation";
-import { verifySessionToken } from "./portal-auth";
-import { sendDebtorCommunication } from "./email";
+import { fixedCompensationPence, statutoryInterestPence } from './statutory-interest';
+import { diffDays } from './escalation';
+import { verifySessionForClient } from './portal-auth';
+import { headerSafe, sendDebtorCommunication } from './email';
 
-export const SENDER_NAME = "Invoice Rescue";
-export const LOCKED_SENDER_EMAIL = "hello@invoicerescue.co.uk";
+export const SENDER_NAME = 'Invoice Rescue';
+export const LOCKED_SENDER_EMAIL = 'hello@invoicerescue.co.uk';
+
+/** How long an approval holds a draft while its email is being dispatched. */
+const DISPATCH_LEASE_SECONDS = 5 * 60;
 
 export const SECURITY_HEADERS: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // Responses carry per-client or per-operator data; shared caches must never keep them.
+  'Cache-Control': 'no-store',
+  // Every response from this module is JSON or a bare 303, so a locked-down CSP breaks nothing.
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Content-Security-Policy':
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self' https://billing.stripe.com; frame-ancestors 'none'; base-uri 'none'",
 };
+
+/**
+ * Parses ?client_id=. Returns null when absent/empty, NaN when malformed (callers answer 400 —
+ * Number('abc') used to slip through as NaN and silently match nothing).
+ */
+function queryClientId(request: Request): number | null {
+  const raw = new URL(request.url).searchParams.get('client_id');
+  if (!raw) return null;
+  if (!/^[1-9]\d*$/.test(raw)) return NaN;
+  const id = Number(raw);
+  // Digits-only can still exceed 2^53 and round to a different id — reject rather than misbind.
+  return Number.isSafeInteger(id) ? id : NaN;
+}
+
+function invalidClientIdResponse(): Response {
+  return Response.json(
+    { ok: false, error: 'Invalid client_id.' },
+    { status: 400, headers: SECURITY_HEADERS }
+  );
+}
+
+/** Mirrors integrations/webhooks.ts timingSafeEqual: no early exit on the first differing char. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+/** Decodes the password half of a Basic credential; null on malformed base64 (atob throws). */
+function basicAuthPassword(authHeader: string): string | null {
+  const match = /^Basic (.+)$/.exec(authHeader);
+  if (!match) return null;
+  try {
+    const decoded = atob(match[1].trim());
+    return decoded.slice(decoded.indexOf(':') + 1);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Audit-trail label for chase_log.reviewed_by. Only admin (operator) actions are attributed to
+ * OPERATOR_NAME; a client approving/skipping in their own portal is recorded as themselves.
+ */
+function reviewerLabel(
+  auth: AuthContext,
+  env: Env,
+  client: { contact_name: string | null; company_name: string }
+): string {
+  if (auth.isAdmin) return env.OPERATOR_NAME || 'Tibor Rames';
+  return `${client.contact_name?.trim() || client.company_name} (client)`;
+}
 
 export interface AuthContext {
   isAdmin: boolean;
@@ -40,48 +104,49 @@ export interface AuthContext {
  */
 export async function resolveAuth(
   request: Request,
-  env: Env,
+  env: Env
 ): Promise<{ auth: AuthContext | null; errorResponse: Response | null }> {
-  const authHeader = request.headers.get("Authorization");
+  const authHeader = request.headers.get('Authorization');
+  const queryCid = queryClientId(request);
 
   // 1. Check HTTP Basic Auth (Admin)
-  if (authHeader?.startsWith("Basic ")) {
-    const match = authHeader.match(/^Basic (.+)$/);
-    const password = match ? atob(match[1]).slice(atob(match[1]).indexOf(":") + 1) : null;
-    if (password === env.ADMIN_SECRET) {
-      const url = new URL(request.url);
-      const queryCid = url.searchParams.get("client_id");
+  if (authHeader?.startsWith('Basic ')) {
+    const password = basicAuthPassword(authHeader);
+    // Fail closed on an unset ADMIN_SECRET rather than accepting an empty password.
+    if (password !== null && env.ADMIN_SECRET && timingSafeEqual(password, env.ADMIN_SECRET)) {
+      if (Number.isNaN(queryCid)) return { auth: null, errorResponse: invalidClientIdResponse() };
       return {
         auth: {
           isAdmin: true,
-          clientId: queryCid ? Number(queryCid) : null,
+          clientId: queryCid,
         },
         errorResponse: null,
       };
     }
     return {
       auth: null,
-      errorResponse: new Response("Unauthorized", {
+      errorResponse: new Response('Unauthorized', {
         status: 401,
-        headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+        headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
       }),
     };
   }
 
   // 2. Check Bearer Token (Client Portal)
   let token: string | null = null;
-  if (authHeader?.startsWith("Bearer ")) {
+  if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.slice(7).trim();
   } else {
     // Check Cookie header: portal_session or ir_portal_session
-    const cookieHeader = request.headers.get("Cookie") ?? "";
-    const match = cookieHeader.match(/(?:^|;\s*)(?:portal_session|ir_portal_session)=([^;]+)/);
+    const cookieHeader = request.headers.get('Cookie') ?? '';
+    const match = /(?:^|;\s*)(?:portal_session|ir_portal_session)=([^;]+)/.exec(cookieHeader);
     if (match) token = match[1];
   }
 
   if (token) {
-    const cid = await verifySessionToken(token, env.PORTAL_SESSION_SECRET);
+    const cid = await verifySessionForClient(token, env);
     if (cid !== null) {
+      if (Number.isNaN(queryCid)) return { auth: null, errorResponse: invalidClientIdResponse() };
       return {
         auth: {
           isAdmin: false,
@@ -98,51 +163,59 @@ export async function resolveAuth(
 /**
  * Resolves the target clientId for client portal requests:
  * - If client session: strictly enforces session clientId. Rejects mismatching ?client_id with 403.
- * - If admin: uses ?client_id if provided.
- * - If unauthenticated (demo mode): falls back to the first active client.
+ * - If admin: uses ?client_id if provided, otherwise falls back to the first active client.
+ * - If unauthenticated: 401. (Previously fell back to the first active client as "demo mode" —
+ *   that leaked real client data to anonymous requests; see security-findings.md 2026-09-22.)
  */
 export async function resolvePortalClientId(
   request: Request,
-  env: Env,
+  env: Env
 ): Promise<{ clientId: number | null; errorResponse: Response | null }> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) {
     return { clientId: null, errorResponse };
   }
 
-  const url = new URL(request.url);
-  const queryCid = url.searchParams.get("client_id");
+  const queryCid = queryClientId(request); // already validated (non-NaN) by resolveAuth
 
-  if (auth) {
-    if (auth.isAdmin) {
-      if (queryCid) return { clientId: Number(queryCid), errorResponse: null };
-    } else {
-      // Authenticated client: strictly isolate tenant
-      if (queryCid && Number(queryCid) !== auth.clientId) {
-        return {
-          clientId: null,
-          errorResponse: Response.json(
-            { ok: false, error: "Forbidden: Cannot access another client's data." },
-            { status: 403, headers: SECURITY_HEADERS },
-          ),
-        };
-      }
-      return { clientId: auth.clientId, errorResponse: null };
-    }
+  if (!auth) {
+    return {
+      clientId: null,
+      errorResponse: new Response('Unauthorized', {
+        status: 401,
+        headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
+      }),
+    };
   }
 
-  // Fallback for admin without client_id or demo unauthenticated mode
+  if (!auth.isAdmin) {
+    // Authenticated client: strictly isolate tenant
+    if (queryCid !== null && queryCid !== auth.clientId) {
+      return {
+        clientId: null,
+        errorResponse: Response.json(
+          { ok: false, error: "Forbidden: Cannot access another client's data." },
+          { status: 403, headers: SECURITY_HEADERS }
+        ),
+      };
+    }
+    return { clientId: auth.clientId, errorResponse: null };
+  }
+
+  if (queryCid !== null) return { clientId: queryCid, errorResponse: null };
+
+  // Admin without an explicit client_id: default to the first active client.
   const activeClient = await env.DB.prepare(
-    `SELECT id FROM clients WHERE status = 'active' ORDER BY id ASC LIMIT 1`,
+    `SELECT id FROM clients WHERE status = 'active' ORDER BY id ASC LIMIT 1`
   ).first<{ id: number }>();
 
   if (activeClient) {
     return { clientId: activeClient.id, errorResponse: null };
   }
 
-  const firstClient = await env.DB.prepare(
-    `SELECT id FROM clients ORDER BY id ASC LIMIT 1`,
-  ).first<{ id: number }>();
+  const firstClient = await env.DB.prepare(`SELECT id FROM clients ORDER BY id ASC LIMIT 1`).first<{
+    id: number;
+  }>();
 
   return { clientId: firstClient ? firstClient.id : null, errorResponse: null };
 }
@@ -161,29 +234,33 @@ export function calculateDaysOverdue(dueDateStr: string): number {
 /**
  * Derives escalation stage (0 to 4) and human-readable label.
  */
-export function deriveStage(daysOverdue: number, maxStepFromChaseLog?: number | null): { stage: number; label: string } {
-  const stage = maxStepFromChaseLog && maxStepFromChaseLog > 0
-    ? maxStepFromChaseLog
-    : daysOverdue < 1
-    ? 0
-    : daysOverdue <= 7
-    ? 1
-    : daysOverdue <= 14
-    ? 2
-    : daysOverdue <= 21
-    ? 3
-    : 4;
+export function deriveStage(
+  daysOverdue: number,
+  maxStepFromChaseLog?: number | null
+): { stage: number; label: string } {
+  const stage =
+    maxStepFromChaseLog && maxStepFromChaseLog > 0
+      ? maxStepFromChaseLog
+      : daysOverdue < 1
+        ? 0
+        : daysOverdue <= 7
+          ? 1
+          : daysOverdue <= 14
+            ? 2
+            : daysOverdue <= 21
+              ? 3
+              : 4;
 
   const label =
     stage === 0
-      ? "Current"
+      ? 'Current'
       : stage === 1
-      ? "Stage 1 (Gentle)"
-      : stage === 2
-      ? "Stage 2 (Follow-up)"
-      : stage === 3
-      ? "Stage 3 (Firm)"
-      : "Stage 4 (Final)";
+        ? 'Stage 1 (Gentle)'
+        : stage === 2
+          ? 'Stage 2 (Follow-up)'
+          : stage === 3
+            ? 'Stage 3 (Firm)'
+            : 'Stage 4 (Final)';
 
   return { stage, label };
 }
@@ -191,9 +268,9 @@ export function deriveStage(daysOverdue: number, maxStepFromChaseLog?: number | 
 /**
  * Formats a monetary amount in major currency units.
  */
-export function formatMoney(amountPence: number, currency: string = "GBP"): string {
-  const sym = currency === "USD" ? "$" : currency === "EUR" ? "€" : "£";
-  return `${sym}${(amountPence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function formatMoney(amountPence: number, currency = 'GBP'): string {
+  const sym = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£';
+  return `${sym}${(amountPence / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // ============================================================================
@@ -209,8 +286,8 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
       {
         ok: true,
         clientId: null,
-        companyName: "Demo Client",
-        plan: "foundation",
+        companyName: 'All clients', // admin view without ?client_id — no single tenant to name
+        plan: 'foundation',
         metrics: {
           totalOverduePence: 0,
           activeChasingPence: 0,
@@ -224,63 +301,69 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
           overdueCount: 0,
         },
         agingBreakdown: {
-          bucket1_to_7: { amountPence: 0, count: 0, percentage: 0, days: "1-7d", stage: 1 },
-          bucket8_to_14: { amountPence: 0, count: 0, percentage: 0, days: "8-14d", stage: 2 },
-          bucket15_to_21: { amountPence: 0, count: 0, percentage: 0, days: "15-21d", stage: 3 },
-          bucket22_plus: { amountPence: 0, count: 0, percentage: 0, days: "22d+", stage: 4 },
-          bucket1: { amountPence: 0, count: 0, percentage: 0, days: "1-7d", stage: 1 },
-          bucket2: { amountPence: 0, count: 0, percentage: 0, days: "8-14d", stage: 2 },
-          bucket3: { amountPence: 0, count: 0, percentage: 0, days: "15-21d", stage: 3 },
-          bucket4: { amountPence: 0, count: 0, percentage: 0, days: "22d+", stage: 4 },
+          bucket1_to_7: { amountPence: 0, count: 0, percentage: 0, days: '1-7d', stage: 1 },
+          bucket8_to_14: { amountPence: 0, count: 0, percentage: 0, days: '8-14d', stage: 2 },
+          bucket15_to_21: { amountPence: 0, count: 0, percentage: 0, days: '15-21d', stage: 3 },
+          bucket22_plus: { amountPence: 0, count: 0, percentage: 0, days: '22d+', stage: 4 },
+          bucket1: { amountPence: 0, count: 0, percentage: 0, days: '1-7d', stage: 1 },
+          bucket2: { amountPence: 0, count: 0, percentage: 0, days: '8-14d', stage: 2 },
+          bucket3: { amountPence: 0, count: 0, percentage: 0, days: '15-21d', stage: 3 },
+          bucket4: { amountPence: 0, count: 0, percentage: 0, days: '22d+', stage: 4 },
         },
         pipeline: { count: 0, amountPence: 0 },
         recentActivity: [],
       },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
-  const client = await env.DB.prepare(
-    `SELECT id, company_name, plan FROM clients WHERE id = ?1`,
-  ).bind(clientId).first<{ id: number; company_name: string; plan: string }>();
+  const client = await env.DB.prepare(`SELECT id, company_name, plan FROM clients WHERE id = ?1`)
+    .bind(clientId)
+    .first<{ id: number; company_name: string; plan: string }>();
 
   const invoices = await env.DB.prepare(
     `SELECT id, amount_pence, currency, due_date, status, paid_date
      FROM invoices
-     WHERE client_id = ?1`,
-  ).bind(clientId).all<{
-    id: number;
-    amount_pence: number;
-    currency: string;
-    due_date: string;
-    status: string;
-    paid_date: string | null;
-  }>();
+     WHERE client_id = ?1`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      amount_pence: number;
+      currency: string;
+      due_date: string;
+      status: string;
+      paid_date: string | null;
+    }>();
 
   let totalOverduePence = 0;
   let activeChasingPence = 0;
   let recoveredMonthPence = 0;
   let overdueCount = 0;
 
-  let b1Pence = 0, b1Count = 0;
-  let b2Pence = 0, b2Count = 0;
-  let b3Pence = 0, b3Count = 0;
-  let b4Pence = 0, b4Count = 0;
+  let b1Pence = 0,
+    b1Count = 0;
+  let b2Pence = 0,
+    b2Count = 0;
+  let b3Pence = 0,
+    b3Count = 0;
+  let b4Pence = 0,
+    b4Count = 0;
 
   const nowMs = Date.now();
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
 
   for (const inv of invoices.results ?? []) {
-    if (inv.status === "paid") {
-      const isRecent = !inv.paid_date || (nowMs - new Date(inv.paid_date).getTime() <= thirtyDaysMs);
+    if (inv.status === 'paid') {
+      const isRecent = !inv.paid_date || nowMs - new Date(inv.paid_date).getTime() <= thirtyDaysMs;
       if (isRecent) {
         recoveredMonthPence += inv.amount_pence;
       }
-    } else if (["overdue", "promised", "disputed", "escalated"].includes(inv.status)) {
+    } else if (['overdue', 'promised', 'disputed', 'escalated'].includes(inv.status)) {
       totalOverduePence += inv.amount_pence;
       overdueCount++;
 
-      if (inv.status !== "disputed") {
+      if (inv.status !== 'disputed') {
         activeChasingPence += inv.amount_pence;
       }
 
@@ -315,32 +398,38 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
      JOIN invoices i ON i.id = cl.invoice_id
      WHERE i.client_id = ?1
      ORDER BY COALESCE(cl.reviewed_at, cl.sent_at) DESC
-     LIMIT 10`,
-  ).bind(clientId).all<{
-    id: number;
-    step: number;
-    channel: string;
-    subject: string | null;
-    status: string;
-    sent_at: string;
-    reviewed_at: string | null;
-    invoice_number: string;
-    debtor_name: string;
-    amount_pence: number;
-    currency: string;
-  }>();
+     LIMIT 10`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      step: number;
+      channel: string;
+      subject: string | null;
+      status: string;
+      sent_at: string;
+      reviewed_at: string | null;
+      invoice_number: string;
+      debtor_name: string;
+      amount_pence: number;
+      currency: string;
+    }>();
 
   const recentActivity = (activityRows.results ?? []).map((row) => {
-    const isSent = row.status === "sent";
-    const isDraft = row.status === "draft";
+    const isSent = row.status === 'sent';
+    const isDraft = row.status === 'draft';
     return {
       id: `chase_${row.id}`,
-      type: isSent ? "sent" : isDraft ? "draft" : "skipped",
-      title: isSent ? `Stage ${row.step} dispatched` : isDraft ? `Stage ${row.step} staged` : `Stage ${row.step} skipped`,
+      type: isSent ? 'sent' : isDraft ? 'draft' : 'skipped',
+      title: isSent
+        ? `Stage ${row.step} dispatched`
+        : isDraft
+          ? `Stage ${row.step} staged`
+          : `Stage ${row.step} skipped`,
       detail: `${row.invoice_number} (${row.debtor_name})`,
       amountPence: row.amount_pence,
       amount: formatMoney(row.amount_pence, row.currency),
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       timestamp: row.reviewed_at || row.sent_at,
       time: row.reviewed_at || row.sent_at,
     };
@@ -350,8 +439,8 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
     {
       ok: true,
       clientId,
-      companyName: client?.company_name ?? "Client",
-      plan: client?.plan ?? "engine",
+      companyName: client?.company_name ?? 'Client',
+      plan: client?.plan ?? 'engine',
       metrics: {
         totalOverduePence,
         activeChasingPence,
@@ -365,14 +454,38 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
         overdueCount,
       },
       agingBreakdown: {
-        bucket1_to_7: { amountPence: b1Pence, count: b1Count, percentage: p1, days: "1-7d", stage: 1 },
-        bucket8_to_14: { amountPence: b2Pence, count: b2Count, percentage: p2, days: "8-14d", stage: 2 },
-        bucket15_to_21: { amountPence: b3Pence, count: b3Count, percentage: p3, days: "15-21d", stage: 3 },
-        bucket22_plus: { amountPence: b4Pence, count: b4Count, percentage: p4, days: "22d+", stage: 4 },
-        bucket1: { amountPence: b1Pence, count: b1Count, percentage: p1, days: "1-7d", stage: 1 },
-        bucket2: { amountPence: b2Pence, count: b2Count, percentage: p2, days: "8-14d", stage: 2 },
-        bucket3: { amountPence: b3Pence, count: b3Count, percentage: p3, days: "15-21d", stage: 3 },
-        bucket4: { amountPence: b4Pence, count: b4Count, percentage: p4, days: "22d+", stage: 4 },
+        bucket1_to_7: {
+          amountPence: b1Pence,
+          count: b1Count,
+          percentage: p1,
+          days: '1-7d',
+          stage: 1,
+        },
+        bucket8_to_14: {
+          amountPence: b2Pence,
+          count: b2Count,
+          percentage: p2,
+          days: '8-14d',
+          stage: 2,
+        },
+        bucket15_to_21: {
+          amountPence: b3Pence,
+          count: b3Count,
+          percentage: p3,
+          days: '15-21d',
+          stage: 3,
+        },
+        bucket22_plus: {
+          amountPence: b4Pence,
+          count: b4Count,
+          percentage: p4,
+          days: '22d+',
+          stage: 4,
+        },
+        bucket1: { amountPence: b1Pence, count: b1Count, percentage: p1, days: '1-7d', stage: 1 },
+        bucket2: { amountPence: b2Pence, count: b2Count, percentage: p2, days: '8-14d', stage: 2 },
+        bucket3: { amountPence: b3Pence, count: b3Count, percentage: p3, days: '15-21d', stage: 3 },
+        bucket4: { amountPence: b4Pence, count: b4Count, percentage: p4, days: '22d+', stage: 4 },
       },
       pipeline: {
         count: overdueCount,
@@ -380,7 +493,7 @@ export async function handlePortalDashboardData(request: Request, env: Env): Pro
       },
       recentActivity,
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }
 
@@ -394,18 +507,23 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
   if (clientId === null) {
     return Response.json(
       { ok: true, clientId: null, debtors: [], total: 0, page: 1, limit: 50, totalPages: 1 },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
   const url = new URL(request.url);
-  const search = (url.searchParams.get("search") || url.searchParams.get("q") || "").trim().toLowerCase();
-  const stageFilter = (url.searchParams.get("stage") || "all").toLowerCase();
-  const statusFilter = (url.searchParams.get("status") || "all").toLowerCase();
-  const sortCol = (url.searchParams.get("sort") || "days_overdue").toLowerCase();
-  const sortDir = (url.searchParams.get("dir") || "desc").toLowerCase() === "asc" ? "asc" : "desc";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "50", 10) || 50));
+  const search = (url.searchParams.get('search') || url.searchParams.get('q') || '')
+    .trim()
+    .toLowerCase();
+  const stageFilter = (url.searchParams.get('stage') || 'all').toLowerCase();
+  const statusFilter = (url.searchParams.get('status') || 'all').toLowerCase();
+  const sortCol = (url.searchParams.get('sort') || 'days_overdue').toLowerCase();
+  const sortDir = (url.searchParams.get('dir') || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
+  const limit = Math.min(
+    100,
+    Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10) || 50)
+  );
 
   const rows = await env.DB.prepare(
     `SELECT
@@ -423,30 +541,32 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
        (SELECT MAX(cl.step) FROM chase_log cl WHERE cl.invoice_id = i.id) AS max_chase_step,
        (SELECT cl.sent_at FROM chase_log cl WHERE cl.invoice_id = i.id AND cl.status = 'sent' ORDER BY cl.sent_at DESC LIMIT 1) AS last_contact_at
      FROM invoices i
-     WHERE i.client_id = ?1`,
-  ).bind(clientId).all<{
-    id: number;
-    client_id: number;
-    debtor_name: string;
-    debtor_email: string | null;
-    invoice_number: string;
-    amount_pence: number;
-    currency: string;
-    due_date: string;
-    issued_date: string | null;
-    status: string;
-    paid_date: string | null;
-    max_chase_step: number | null;
-    last_contact_at: string | null;
-  }>();
+     WHERE i.client_id = ?1`
+  )
+    .bind(clientId)
+    .all<{
+      id: number;
+      client_id: number;
+      debtor_name: string;
+      debtor_email: string | null;
+      invoice_number: string;
+      amount_pence: number;
+      currency: string;
+      due_date: string;
+      issued_date: string | null;
+      status: string;
+      paid_date: string | null;
+      max_chase_step: number | null;
+      last_contact_at: string | null;
+    }>();
 
   let debtors = (rows.results ?? []).map((row) => {
     const daysOverdue = calculateDaysOverdue(row.due_date);
     const { stage, label } = deriveStage(daysOverdue, row.max_chase_step);
 
-    let lastContact = "No contact yet";
-    if (row.status === "paid") {
-      lastContact = "Settled in full";
+    let lastContact = 'No contact yet';
+    if (row.status === 'paid') {
+      lastContact = 'Settled in full';
     } else if (row.last_contact_at) {
       lastContact = row.last_contact_at;
     }
@@ -457,7 +577,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       debtor_name: row.debtor_name,
       debtor_email: row.debtor_email,
       amount_pence: row.amount_pence,
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       due_date: row.due_date,
       issued_date: row.issued_date,
       days_overdue: daysOverdue,
@@ -474,18 +594,18 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       (d) =>
         d.debtor_name.toLowerCase().includes(search) ||
         d.invoice_number.toLowerCase().includes(search) ||
-        (d.debtor_email && d.debtor_email.toLowerCase().includes(search)),
+        (d.debtor_email && d.debtor_email.toLowerCase().includes(search))
     );
   }
 
   // 2. Stage Filter
-  if (stageFilter !== "all") {
+  if (stageFilter !== 'all') {
     let targetStage: number | null = null;
-    if (stageFilter === "1" || stageFilter === "stage_1") targetStage = 1;
-    else if (stageFilter === "2" || stageFilter === "stage_2") targetStage = 2;
-    else if (stageFilter === "3" || stageFilter === "stage_3") targetStage = 3;
-    else if (stageFilter === "4" || stageFilter === "stage_4") targetStage = 4;
-    else if (stageFilter === "0" || stageFilter === "current") targetStage = 0;
+    if (stageFilter === '1' || stageFilter === 'stage_1') targetStage = 1;
+    else if (stageFilter === '2' || stageFilter === 'stage_2') targetStage = 2;
+    else if (stageFilter === '3' || stageFilter === 'stage_3') targetStage = 3;
+    else if (stageFilter === '4' || stageFilter === 'stage_4') targetStage = 4;
+    else if (stageFilter === '0' || stageFilter === 'current') targetStage = 0;
 
     if (targetStage !== null) {
       debtors = debtors.filter((d) => d.stage === targetStage);
@@ -493,7 +613,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
   }
 
   // 3. Status Filter
-  if (statusFilter !== "all") {
+  if (statusFilter !== 'all') {
     debtors = debtors.filter((d) => d.status.toLowerCase() === statusFilter);
   }
 
@@ -502,28 +622,28 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
     let valA: string | number = a.days_overdue;
     let valB: string | number = b.days_overdue;
 
-    if (sortCol === "amount" || sortCol === "amount_pence") {
+    if (sortCol === 'amount' || sortCol === 'amount_pence') {
       valA = a.amount_pence;
       valB = b.amount_pence;
-    } else if (sortCol === "due_date") {
+    } else if (sortCol === 'due_date') {
       valA = a.due_date;
       valB = b.due_date;
-    } else if (sortCol === "debtor_name") {
+    } else if (sortCol === 'debtor_name') {
       valA = a.debtor_name.toLowerCase();
       valB = b.debtor_name.toLowerCase();
-    } else if (sortCol === "invoice_number") {
+    } else if (sortCol === 'invoice_number') {
       valA = a.invoice_number.toLowerCase();
       valB = b.invoice_number.toLowerCase();
-    } else if (sortCol === "status") {
+    } else if (sortCol === 'status') {
       valA = a.status.toLowerCase();
       valB = b.status.toLowerCase();
-    } else if (sortCol === "stage") {
+    } else if (sortCol === 'stage') {
       valA = a.stage;
       valB = b.stage;
     }
 
-    if (valA < valB) return sortDir === "asc" ? -1 : 1;
-    if (valA > valB) return sortDir === "asc" ? 1 : -1;
+    if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDir === 'asc' ? 1 : -1;
     return 0;
   });
 
@@ -541,7 +661,7 @@ export async function handlePortalDebtors(request: Request, env: Env): Promise<R
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }
 
@@ -552,18 +672,17 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
-  const boeBaseRate = Number(env.BOE_BASE_RATE_PERCENT || "3.75");
-  const queryParamCid = new URL(request.url).searchParams.get("client_id");
+  const boeBaseRate = Number(env.BOE_BASE_RATE_PERCENT || '3.75');
 
-  // Determine clientId scope:
-  // If client session, lock to auth.clientId. If admin, optionally filter by queryParamCid.
-  const targetCid = !auth.isAdmin ? auth.clientId : queryParamCid ? Number(queryParamCid) : null;
+  // Determine clientId scope: a client session is locked to its own id; for admin, resolveAuth
+  // has already set auth.clientId from a validated ?client_id (or null = all clients).
+  const targetCid = auth.clientId;
 
   let sql = `
     SELECT
@@ -617,17 +736,18 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
   const drafts = (rows.results ?? []).map((row) => {
     const daysOverdue = calculateDaysOverdue(row.due_date);
     const compensationPence = fixedCompensationPence(row.amount_pence);
-    const interestPence = daysOverdue <= 0 ? 0 : statutoryInterestPence(row.amount_pence, daysOverdue, boeBaseRate);
+    const interestPence =
+      daysOverdue <= 0 ? 0 : statutoryInterestPence(row.amount_pence, daysOverdue, boeBaseRate);
     const totalClaimPence = row.amount_pence + compensationPence + interestPence;
 
     const stepLabel =
       row.step === 1
-        ? "Stage 1 (Gentle)"
+        ? 'Stage 1 (Gentle)'
         : row.step === 2
-        ? "Stage 2 (Follow-up)"
-        : row.step === 3
-        ? "Stage 3 (Firm Notice)"
-        : "Stage 4 (Final Notice)";
+          ? 'Stage 2 (Follow-up)'
+          : row.step === 3
+            ? 'Stage 3 (Firm Notice)'
+            : 'Stage 4 (Final Notice)';
 
     return {
       id: row.id,
@@ -637,13 +757,13 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
       debtor_email: row.debtor_email,
       client_id: row.client_id,
       company_name: row.company_name,
-      currency: row.currency || "GBP",
+      currency: row.currency || 'GBP',
       due_date: row.due_date,
       days_overdue: daysOverdue,
       step: row.step,
       step_label: stepLabel,
       subject: row.subject,
-      body: row.body ?? "",
+      body: row.body ?? '',
       locked_sender: env.NOTIFY_FROM || LOCKED_SENDER_EMAIL,
       amount_pence: row.amount_pence,
       principal_pence: row.amount_pence,
@@ -663,88 +783,95 @@ export async function handleGetDrafts(request: Request, env: Env): Promise<Respo
 export async function handleApproveDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   const row = await env.DB.prepare(
-    `SELECT cl.id, cl.body, cl.subject, cl.status, cl.step, cl.invoice_id,
+    `SELECT cl.id, cl.body, cl.subject, cl.status, cl.step, cl.invoice_id, cl.sent_at,
             i.debtor_email, i.debtor_name, i.invoice_number, i.client_id,
-            c.company_name
+            c.company_name, c.contact_name
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
      JOIN clients c ON c.id = i.client_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{
-    id: number;
-    body: string | null;
-    subject: string | null;
-    status: string;
-    step: number;
-    invoice_id: number;
-    debtor_email: string | null;
-    debtor_name: string;
-    invoice_number: string;
-    client_id: number;
-    company_name: string;
-  }>();
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{
+      id: number;
+      body: string | null;
+      subject: string | null;
+      status: string;
+      step: number;
+      invoice_id: number;
+      sent_at: string;
+      debtor_email: string | null;
+      debtor_name: string;
+      invoice_number: string;
+      client_id: number;
+      company_name: string;
+      contact_name: string | null;
+    }>();
 
-  if (!row || row.status !== "draft") {
+  if (!row || row.status !== 'draft') {
     return Response.json(
-      { ok: false, error: "Draft not found or already reviewed." },
-      { status: 404, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
     );
   }
 
   // Tenant Boundary Check: Client sessions cannot approve another tenant's draft
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot approve draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot approve draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
   if (!row.debtor_email) {
     return Response.json(
-      { ok: false, error: "Invoice has no debtor email on file." },
-      { status: 422, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Invoice has no debtor email on file.' },
+      { status: 422, headers: SECURITY_HEADERS }
     );
   }
 
   // Extract optional edited message body (supports both JSON and form URL-encoded)
-  let body = row.body ?? "";
-  const contentType = request.headers.get("Content-Type") ?? "";
+  let body = row.body ?? '';
+  const contentType = request.headers.get('Content-Type') ?? '';
 
-  if (contentType.includes("application/json")) {
+  if (contentType.includes('application/json')) {
     try {
-      const json = await request.json() as Record<string, unknown>;
+      const json = (await request.json()) as any;
       const edited = (json.body ?? json.custom_message) as string | undefined;
-      if (typeof edited === "string" && edited.trim()) {
+      if (typeof edited === 'string' && edited.trim()) {
         body = edited;
       }
     } catch {
       // Ignore unparseable JSON and keep current body
     }
   } else if (
-    contentType.includes("application/x-www-form-urlencoded") ||
-    contentType.includes("multipart/form-data")
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
   ) {
     try {
       const form = await request.formData();
-      const edited = form.get("body") ?? form.get("custom_message");
-      if (typeof edited === "string" && edited.trim()) {
+      const edited = form.get('body') ?? form.get('custom_message');
+      if (typeof edited === 'string' && edited.trim()) {
         body = edited;
       }
     } catch {
@@ -752,22 +879,48 @@ export async function handleApproveDraft(
     }
   }
 
+  // Take a short dispatch lease before sending: the conditional UPDATE is atomic, so of two
+  // concurrent approvals only one gets changes === 1 and sends (check-then-send double-sent).
+  // The row stays 'draft' until delivery succeeds — marking it 'sent' up front left a false
+  // audit record if the Worker died mid-send. An expired lease makes the draft approvable again.
+  const reviewerName = reviewerLabel(auth, env, row);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const claim = await env.DB.prepare(
+    `UPDATE chase_log
+     SET dispatch_lease_until = ?2
+     WHERE id = ?1 AND status = 'draft'
+       AND (dispatch_lease_until IS NULL OR dispatch_lease_until < ?3)`
+  )
+    .bind(draftId, nowSeconds + DISPATCH_LEASE_SECONDS, nowSeconds)
+    .run();
+
+  if (claim.meta.changes === 0) {
+    return Response.json(
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
+    );
+  }
+
   // Dispatch outbound debtor email locked to hello@invoicerescue.co.uk
   const sent = await sendDebtorCommunication(
     env,
     row.debtor_email,
-    row.subject ?? `Re: Invoice ${row.invoice_number}`,
-    body,
+    headerSafe(row.subject ?? `Re: Invoice ${row.invoice_number}`),
+    body
   );
 
   if (!sent) {
+    // Release the lease so the draft is immediately approvable again, unchanged.
+    await env.DB.prepare(
+      `UPDATE chase_log SET dispatch_lease_until = NULL WHERE id = ?1 AND status = 'draft'`
+    )
+      .bind(draftId)
+      .run();
     return Response.json(
-      { ok: false, error: "Failed to dispatch email communication to debtor." },
-      { status: 500, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Failed to dispatch email communication to debtor.' },
+      { status: 500, headers: SECURITY_HEADERS }
     );
   }
-
-  const reviewerName = env.OPERATOR_NAME || "Tibor Rames";
 
   await env.DB.prepare(
     `UPDATE chase_log
@@ -776,25 +929,28 @@ export async function handleApproveDraft(
          outcome = 'sent',
          sent_at = datetime('now'),
          reviewed_at = datetime('now'),
-         reviewed_by = ?3
-     WHERE id = ?1 AND status = 'draft'`,
-  ).bind(draftId, body, reviewerName).run();
+         reviewed_by = ?3,
+         dispatch_lease_until = NULL
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, body, reviewerName)
+    .run();
 
-  const accepts = request.headers.get("Accept") ?? "";
-  if (accepts.includes("application/json")) {
+  const accepts = request.headers.get('Accept') ?? '';
+  if (accepts.includes('application/json')) {
     return Response.json(
       {
         ok: true,
         draft_id: draftId,
-        status: "sent",
+        status: 'sent',
         recipient: row.debtor_email,
         sent_at: new Date().toISOString(),
       },
-      { headers: SECURITY_HEADERS },
+      { headers: SECURITY_HEADERS }
     );
   }
 
-  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
+  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: '/admin' } });
 }
 
 // ============================================================================
@@ -803,60 +959,83 @@ export async function handleApproveDraft(
 export async function handleSkipDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   const row = await env.DB.prepare(
-    `SELECT cl.id, cl.status, i.client_id
+    `SELECT cl.id, cl.status, i.client_id, c.company_name, c.contact_name
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{ id: number; status: string; client_id: number }>();
+     JOIN clients c ON c.id = i.client_id
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{
+      id: number;
+      status: string;
+      client_id: number;
+      company_name: string;
+      contact_name: string | null;
+    }>();
 
   if (!row) {
-    return Response.json({ ok: false, error: "Draft not found." }, { status: 404, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Draft not found.' },
+      { status: 404, headers: SECURITY_HEADERS }
+    );
   }
 
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot skip draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot skip draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
-  if (row.status === "draft") {
-    const reviewerName = env.OPERATOR_NAME || "Tibor Rames";
-    await env.DB.prepare(
-      `UPDATE chase_log
-       SET status = 'skipped',
-           reviewed_at = datetime('now'),
-           reviewed_by = ?2
-       WHERE id = ?1 AND status = 'draft'`,
-    ).bind(draftId, reviewerName).run();
-  }
+  // Conditional on status = 'draft': skipping an already sent/skipped row used to report
+  // 200 "skipped" while the DB kept 'sent' — now it's an explicit 409.
+  const skip = await env.DB.prepare(
+    `UPDATE chase_log
+     SET status = 'skipped',
+         reviewed_at = datetime('now'),
+         reviewed_by = ?2
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, reviewerLabel(auth, env, row))
+    .run();
 
-  const accepts = request.headers.get("Accept") ?? "";
-  if (accepts.includes("application/json")) {
+  if (skip.meta.changes === 0) {
     return Response.json(
-      { ok: true, draft_id: draftId, status: "skipped" },
-      { headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft already reviewed.' },
+      { status: 409, headers: SECURITY_HEADERS }
     );
   }
 
-  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: "/admin" } });
+  const accepts = request.headers.get('Accept') ?? '';
+  if (accepts.includes('application/json')) {
+    return Response.json(
+      { ok: true, draft_id: draftId, status: 'skipped' },
+      { headers: SECURITY_HEADERS }
+    );
+  }
+
+  return new Response(null, { status: 303, headers: { ...SECURITY_HEADERS, Location: '/admin' } });
 }
 
 // ============================================================================
@@ -865,47 +1044,56 @@ export async function handleSkipDraft(
 export async function handleUpdateDraft(
   request: Request,
   env: Env,
-  draftIdParam: string,
+  draftIdParam: string
 ): Promise<Response> {
   const { auth, errorResponse } = await resolveAuth(request, env);
   if (errorResponse) return errorResponse;
   if (!auth) {
-    return new Response("Unauthorized", {
+    return new Response('Unauthorized', {
       status: 401,
-      headers: { ...SECURITY_HEADERS, "WWW-Authenticate": 'Basic realm="Invoice Rescue admin"' },
+      headers: { ...SECURITY_HEADERS, 'WWW-Authenticate': 'Basic realm="Invoice Rescue admin"' },
     });
   }
 
   const draftId = Number(draftIdParam);
   if (isNaN(draftId) || draftId <= 0) {
-    return Response.json({ ok: false, error: "Invalid draft ID." }, { status: 400, headers: SECURITY_HEADERS });
+    return Response.json(
+      { ok: false, error: 'Invalid draft ID.' },
+      { status: 400, headers: SECURITY_HEADERS }
+    );
   }
 
   let body: string | null = null;
   let subject: string | null = null;
 
-  const contentType = request.headers.get("Content-Type") ?? "";
-  if (contentType.includes("application/json")) {
+  const contentType = request.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/json')) {
     try {
-      const json = await request.json() as Record<string, unknown>;
-      if (typeof json.body === "string") body = json.body;
-      else if (typeof json.custom_message === "string") body = json.custom_message;
-      if (typeof json.subject === "string") subject = json.subject;
+      const json = (await request.json()) as any;
+      if (typeof json.body === 'string') body = json.body;
+      else if (typeof json.custom_message === 'string') body = json.custom_message;
+      if (typeof json.subject === 'string') subject = json.subject;
     } catch {
-      return Response.json({ ok: false, error: "Invalid JSON body." }, { status: 400, headers: SECURITY_HEADERS });
+      return Response.json(
+        { ok: false, error: 'Invalid JSON body.' },
+        { status: 400, headers: SECURITY_HEADERS }
+      );
     }
   } else if (
-    contentType.includes("application/x-www-form-urlencoded") ||
-    contentType.includes("multipart/form-data")
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
   ) {
     try {
       const form = await request.formData();
-      const b = form.get("body") ?? form.get("custom_message");
-      if (typeof b === "string") body = b;
-      const s = form.get("subject");
-      if (typeof s === "string") subject = s;
+      const b = form.get('body') ?? form.get('custom_message');
+      if (typeof b === 'string') body = b;
+      const s = form.get('subject');
+      if (typeof s === 'string') subject = s;
     } catch {
-      return Response.json({ ok: false, error: "Invalid form body." }, { status: 400, headers: SECURITY_HEADERS });
+      return Response.json(
+        { ok: false, error: 'Invalid form body.' },
+        { status: 400, headers: SECURITY_HEADERS }
+      );
     }
   } else {
     try {
@@ -916,10 +1104,10 @@ export async function handleUpdateDraft(
     }
   }
 
-  if (body === null || !body.trim()) {
+  if (!body?.trim()) {
     return Response.json(
-      { ok: false, error: "Draft body cannot be empty." },
-      { status: 400, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft body cannot be empty.' },
+      { status: 400, headers: SECURITY_HEADERS }
     );
   }
 
@@ -927,20 +1115,22 @@ export async function handleUpdateDraft(
     `SELECT cl.id, cl.status, cl.subject, i.client_id
      FROM chase_log cl
      JOIN invoices i ON i.id = cl.invoice_id
-     WHERE cl.id = ?1`,
-  ).bind(draftId).first<{ id: number; status: string; subject: string | null; client_id: number }>();
+     WHERE cl.id = ?1`
+  )
+    .bind(draftId)
+    .first<{ id: number; status: string; subject: string | null; client_id: number }>();
 
-  if (!row || row.status !== "draft") {
+  if (!row || row.status !== 'draft') {
     return Response.json(
-      { ok: false, error: "Draft not found or already reviewed." },
-      { status: 404, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Draft not found or already reviewed.' },
+      { status: 404, headers: SECURITY_HEADERS }
     );
   }
 
   if (!auth.isAdmin && auth.clientId !== row.client_id) {
     return Response.json(
-      { ok: false, error: "Forbidden: Cannot edit draft for another client." },
-      { status: 403, headers: SECURITY_HEADERS },
+      { ok: false, error: 'Forbidden: Cannot edit draft for another client.' },
+      { status: 403, headers: SECURITY_HEADERS }
     );
   }
 
@@ -950,8 +1140,10 @@ export async function handleUpdateDraft(
     `UPDATE chase_log
      SET body = ?2,
          subject = COALESCE(?3, subject)
-     WHERE id = ?1 AND status = 'draft'`,
-  ).bind(draftId, body, updatedSubject).run();
+     WHERE id = ?1 AND status = 'draft'`
+  )
+    .bind(draftId, body, updatedSubject)
+    .run();
 
   return Response.json(
     {
@@ -960,6 +1152,6 @@ export async function handleUpdateDraft(
       body,
       subject: updatedSubject,
     },
-    { headers: SECURITY_HEADERS },
+    { headers: SECURITY_HEADERS }
   );
 }

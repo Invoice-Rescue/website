@@ -3,8 +3,6 @@ import assert from "node:assert";
 import {
   sendOperatorNotification,
   sendDebtorCommunication,
-  isValidEmail,
-  formatDebtorSignoff,
   SENDER_NAME,
   LOCKED_SENDER_EMAIL,
   OPERATOR_INBOX_EMAIL,
@@ -77,7 +75,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
       );
 
       // Date header (RFC 2822)
-      const dateHeader = msg.headers["Date"];
+      const dateHeader = msg.headers.Date;
       assert.ok(dateHeader, "Must generate Date header");
       assert.ok(!isNaN(Date.parse(dateHeader)), "Date header must be valid RFC 2822 date");
     });
@@ -90,7 +88,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         send: async () => {
           throw new Error("Temporary network timeout communicating with mail edge");
         },
-      } as any;
+      };
 
       let threw = false;
       let result = false;
@@ -149,7 +147,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
       assert.strictEqual(msg.headers["Auto-Submitted"], "auto-generated");
       assert.strictEqual(msg.headers["Reply-To"], LOCKED_SENDER_EMAIL);
       assert.ok(msg.headers["Message-ID"]?.endsWith("@invoicerescue.co.uk>"));
-      assert.ok(!isNaN(Date.parse(msg.headers["Date"] ?? "")));
+      assert.ok(!isNaN(Date.parse(msg.headers.Date ?? "")));
     });
 
     test("2.2 Appends Tibor Rames sign-off when options.clientBusinessName is provided", async () => {
@@ -228,7 +226,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         send: async () => {
           throw new Error("Rate limit exceeded on SendEmail binding");
         },
-      } as any;
+      };
 
       let threw = false;
       let result = false;
@@ -306,7 +304,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         send: async () => {
           throw new Error("Simulated Cloudflare edge outage on NOTIFY binding");
         },
-      } as any;
+      };
 
       // Cron should succeed without throwing
       const result = await runOverdueDetection(env);
@@ -369,7 +367,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         send: async () => {
           throw new Error("Mail submission rejected by edge");
         },
-      } as any;
+      };
 
       const req = new Request("http://localhost/api/admin/drafts/980/approve", {
         method: "POST",
@@ -398,7 +396,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
       // Query sqlite_master to verify index creation
       const indices = db.rawSqlite
         .prepare("SELECT name, tbl_name FROM sqlite_master WHERE type = 'index'")
-        .all() as Array<{ name: string; tbl_name: string }>;
+        .all() as { name: string; tbl_name: string }[];
 
       const indexNames = indices.map((i) => i.name);
       assert.ok(indexNames.includes("idx_chase_log_status"), "idx_chase_log_status must exist");
@@ -416,7 +414,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
       // 1. chase_log status lookup
       const chasePlan = db.rawSqlite
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM chase_log WHERE status = 'draft'")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       assert.ok(
         chasePlan.some((p) => p.detail.includes("idx_chase_log_status")),
         `chase_log query must use idx_chase_log_status: ${JSON.stringify(chasePlan)}`,
@@ -427,7 +425,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         .prepare(
           "EXPLAIN QUERY PLAN SELECT client_id FROM accounting_connections WHERE provider = 'xero' AND tenant_id = 't_123'",
         )
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       assert.ok(
         acctPlan.some((p) => p.detail.includes("idx_accounting_connections_lookup")),
         `accounting_connections query must use idx_accounting_connections_lookup: ${JSON.stringify(acctPlan)}`,
@@ -436,7 +434,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
       // 3. clients status lookup
       const clientPlan = db.rawSqlite
         .prepare("EXPLAIN QUERY PLAN SELECT id FROM clients WHERE status = 'active'")
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       assert.ok(
         clientPlan.some((p) => p.detail.includes("idx_clients_status")),
         `clients query must use idx_clients_status: ${JSON.stringify(clientPlan)}`,
@@ -447,7 +445,7 @@ describe("Milestone M4: Email Deliverability & Split-Trust Controls", () => {
         .prepare(
           "EXPLAIN QUERY PLAN SELECT id FROM invoices WHERE client_id = 1 ORDER BY due_date DESC",
         )
-        .all() as Array<{ detail: string }>;
+        .all() as { detail: string }[];
       assert.ok(
         invoicePlan.some((p) => p.detail.includes("idx_invoices_client_due")),
         `invoices query must use idx_invoices_client_due: ${JSON.stringify(invoicePlan)}`,

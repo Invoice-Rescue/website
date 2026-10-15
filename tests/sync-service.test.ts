@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createTestEnv } from './e2e/harness';
 import worker from '../backend/src/index';
 import { SyncService, type NormalizedInvoice } from '../backend/src/lib/integrations/sync-service';
-import { encryptToken, decryptToken } from '../backend/src/lib/integrations/oauth-manager';
+import { encryptToken } from '../backend/src/lib/integrations/oauth-manager';
 
 describe('SyncService & Accounting Webhooks', () => {
   let originalFetch: typeof globalThis.fetch;
@@ -55,11 +55,87 @@ describe('SyncService & Accounting Webhooks', () => {
     const action = await syncService.reconcileInvoice(1, norm);
     assert.strictEqual(action, 'created');
 
-    const row = await db.prepare('SELECT invoice_number, status, amount_pence FROM invoices WHERE client_id = 1 AND invoice_number = ?1')
-      .bind('INV-NEW-1').first<any>();
+    const row = await db
+      .prepare(
+        'SELECT invoice_number, status, amount_pence FROM invoices WHERE client_id = 1 AND invoice_number = ?1'
+      )
+      .bind('INV-NEW-1')
+      .first<any>();
     assert.ok(row);
     assert.strictEqual(row.status, 'overdue');
     assert.strictEqual(row.amount_pence, 45000);
+  });
+
+  test('reconcileInvoice does not import unpaid invoices that are not yet past due', async () => {
+    const { env, db } = createTestEnv();
+    await db.rawSqlite.exec(`
+      INSERT INTO clients (id, company_name, contact_email, plan, status)
+      VALUES (1, 'Sync Client Future', 'scf@test.com', 'engine', 'active');
+    `);
+    const syncService = new SyncService(env.DB, env);
+    const base: NormalizedInvoice = {
+      externalId: 'ext-future',
+      invoiceNumber: 'INV-FUTURE-1',
+      debtorName: 'Debtor Future',
+      debtorEmail: null,
+      amountPence: 10000,
+      currency: 'GBP',
+      dueDate: '2999-01-01',
+      issuedDate: '2026-07-01',
+      isPaid: false,
+      paidDate: null,
+      isDisputedOrVoid: false,
+    };
+
+    assert.strictEqual(await syncService.reconcileInvoice(1, base), 'unchanged');
+    const row = await db
+      .prepare('SELECT id FROM invoices WHERE client_id = 1 AND invoice_number = ?1')
+      .bind('INV-FUTURE-1')
+      .first();
+    assert.strictEqual(row, null);
+  });
+
+  test('Xero normalization keeps the original principal for fully paid invoices', () => {
+    const { env } = createTestEnv();
+    const syncService = new SyncService(env.DB, env);
+    const normalize = (inv: Record<string, unknown>): NormalizedInvoice =>
+      syncService.normalizeXeroInvoice(inv);
+
+    const paid = normalize({
+      InvoiceID: 'x-1',
+      InvoiceNumber: 'INV-PAID',
+      Status: 'PAID',
+      Total: 1250.5,
+      AmountDue: 0,
+      DueDateString: '2026-08-01T00:00:00',
+    });
+    assert.strictEqual(paid.isPaid, true);
+    assert.strictEqual(paid.amountPence, 125050);
+
+    const partlyPaid = normalize({
+      InvoiceID: 'x-2',
+      InvoiceNumber: 'INV-PART',
+      Status: 'AUTHORISED',
+      Total: 1000,
+      AmountDue: 400,
+      DueDateString: '2026-08-01T00:00:00',
+    });
+    assert.strictEqual(partlyPaid.isPaid, false);
+    assert.strictEqual(partlyPaid.amountPence, 40000);
+  });
+
+  test('QuickBooks normalization keeps the original principal for fully paid invoices', () => {
+    const { env } = createTestEnv();
+    const syncService = new SyncService(env.DB, env);
+    const paid = syncService.normalizeQuickBooksInvoice({
+      Id: 'q-1',
+      DocNumber: 'QB-PAID',
+      TotalAmt: 300,
+      Balance: 0,
+      DueDate: '2026-08-01',
+    });
+    assert.strictEqual(paid.isPaid, true);
+    assert.strictEqual(paid.amountPence, 30000);
   });
 
   test('reconcileInvoice marks paid and halts pending drafts in chase_log', async () => {
@@ -93,12 +169,16 @@ describe('SyncService & Accounting Webhooks', () => {
     assert.strictEqual(action, 'marked_paid');
 
     // Verify invoice status updated to 'paid'
-    const invoice = await db.prepare('SELECT status, paid_date FROM invoices WHERE id = 10').first<any>();
+    const invoice = await db
+      .prepare('SELECT status, paid_date FROM invoices WHERE id = 10')
+      .first<any>();
     assert.strictEqual(invoice.status, 'paid');
     assert.strictEqual(invoice.paid_date, '2026-09-15');
 
     // CRITICAL: Draft in chase_log MUST be transitioned to 'skipped'
-    const draft = await db.prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 101').first<any>();
+    const draft = await db
+      .prepare('SELECT status, reviewed_at FROM chase_log WHERE id = 101')
+      .first<any>();
     assert.strictEqual(draft.status, 'skipped');
     assert.ok(draft.reviewed_at);
   });
@@ -186,7 +266,9 @@ describe('SyncService & Accounting Webhooks', () => {
     assert.strictEqual(goodRes.status, 200);
 
     // Check event recorded in accounting_webhook_events
-    const eventRow = await db.prepare("SELECT id, provider FROM accounting_webhook_events WHERE provider = 'xero'").first<any>();
+    const eventRow = await db
+      .prepare("SELECT id, provider FROM accounting_webhook_events WHERE provider = 'xero'")
+      .first<any>();
     assert.ok(eventRow);
     assert.strictEqual(eventRow.provider, 'xero');
 
@@ -245,7 +327,9 @@ describe('SyncService & Accounting Webhooks', () => {
     const goodRes = await worker.fetch(goodReq, env);
     assert.strictEqual(goodRes.status, 200);
 
-    const eventRow = await db.prepare("SELECT id, provider FROM accounting_webhook_events WHERE provider = 'quickbooks'").first<any>();
+    const eventRow = await db
+      .prepare("SELECT id, provider FROM accounting_webhook_events WHERE provider = 'quickbooks'")
+      .first<any>();
     assert.ok(eventRow);
     assert.strictEqual(eventRow.provider, 'quickbooks');
   });
@@ -267,10 +351,15 @@ describe('SyncService & Accounting Webhooks', () => {
     const encAccess = await encryptToken('valid-xero-access-token', secret);
     const encRefresh = await encryptToken('valid-xero-refresh-token', secret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-sync-1', ?1, ?2, '2026-09-16T12:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
     // Mock Xero Invoices API response
     globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
@@ -319,12 +408,22 @@ describe('SyncService & Accounting Webhooks', () => {
     assert.strictEqual(result.invoicesMarkedPaid, 1);
 
     // Verify D1 records
-    const overdueInv = await db.prepare('SELECT invoice_number, status, amount_pence FROM invoices WHERE invoice_number = ?1').bind('INV-XERO-101').first<any>();
+    const overdueInv = await db
+      .prepare(
+        'SELECT invoice_number, status, amount_pence FROM invoices WHERE invoice_number = ?1'
+      )
+      .bind('INV-XERO-101')
+      .first<any>();
     assert.ok(overdueInv);
     assert.strictEqual(overdueInv.status, 'overdue');
     assert.strictEqual(overdueInv.amount_pence, 150000);
 
-    const paidInv = await db.prepare('SELECT invoice_number, status, amount_pence, paid_date FROM invoices WHERE invoice_number = ?1').bind('INV-XERO-102').first<any>();
+    const paidInv = await db
+      .prepare(
+        'SELECT invoice_number, status, amount_pence, paid_date FROM invoices WHERE invoice_number = ?1'
+      )
+      .bind('INV-XERO-102')
+      .first<any>();
     assert.ok(paidInv);
     assert.strictEqual(paidInv.status, 'paid');
     assert.strictEqual(paidInv.paid_date, '2026-08-20');
@@ -346,20 +445,25 @@ describe('SyncService & Accounting Webhooks', () => {
     const encAccess = await encryptToken('cron-xero-access', secret);
     const encRefresh = await encryptToken('cron-xero-refresh', secret);
 
-    await db.prepare(`
+    await db
+      .prepare(
+        `
       INSERT INTO accounting_connections (client_id, provider, tenant_id, access_token_encrypted, refresh_token_encrypted, expires_at, status)
       VALUES (1, 'xero', 'tenant-cron-1', ?1, ?2, '2026-09-16T12:00:00Z', 'active')
-    `).bind(encAccess, encRefresh).run();
+    `
+      )
+      .bind(encAccess, encRefresh)
+      .run();
 
     let syncCalled = false;
     globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
       const url = input.toString();
       if (url.includes('/api.xro/2.0/Invoices')) {
         syncCalled = true;
-        return new Response(
-          JSON.stringify({ Invoices: [] }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ Invoices: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
       return new Response('Not Found', { status: 404 });
     };

@@ -9,15 +9,17 @@
 		"npm.packageManager": "npm",
 		"typescript.tsdk": "node_modules/typescript/lib",
 		"typescript.preferences.importModuleSpecifier": "relative",
+		"eslint.enable": true,
+		"standard.enable": false,
 		"files.exclude": {
 			"**/.git": true,
 			"**/.wrangler": true,
 			"**/.swarm": true,
 			"**/.claude-flow": true,
 			"**/.hive-mind": true,
-			"**/*.tsbuildinfo"
+			"**/*.tsbuildinfo": true
 		},
-		"search.exclude": {
+			"search.exclude": {
 			"**/node_modules": true,
 			"**/package-lock.json": true,
 			"**/worker-configuration.d.ts": true,

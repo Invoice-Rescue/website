@@ -1,9 +1,12 @@
-﻿# End‑to‑End Test Suite
+# End-to-end test suite
 
-This directory contains the full Playwright E2E tests for Invoice Rescue. Run the suite locally with:
+Playwright E2E tests for Invoice Rescue. They boot `wrangler dev` against a local D1 database and drive `/admin` through HTTP Basic Auth.
 
-`ash
+Local run (needs `ADMIN_SECRET` in `.dev.vars` and local migrations applied):
+
+```bash
+npx wrangler d1 migrations apply invoice-rescue-db --local
 npm run e2e
-`
+```
 
-The tests cover the happy‑path credit‑control flow, failure injection, email handling, and accessibility compliance.
+Covered: the happy-path credit-control flow, failure injection, and split-trust email routing. CI builds its own throwaway `.dev.vars` and migrated local D1 before running this suite (see `.github/workflows/ci.yml`).

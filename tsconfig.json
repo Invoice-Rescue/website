@@ -11,5 +11,12 @@
     "resolveJsonModule": true,
     "allowJs": true
   },
-  "include": ["backend/src", "worker-configuration.d.ts", "tests", "scripts"]
+  "include": [
+    "backend/src",
+    "worker-configuration.d.ts",
+    "tests",
+    "scripts",
+    "e2e",
+    "playwright.config.ts"
+  ]
 }

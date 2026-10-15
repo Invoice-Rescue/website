@@ -15,13 +15,13 @@ import {
   skipTenantDraft,
   TenantRepository,
   InvalidTenantError,
-  InvalidInvoiceDataError,
-  InvalidWebhookEventError,
-  InvalidInputError,
 } from '../backend/src/lib/tenant-repo';
 import { SyncService, NormalizedInvoice } from '../backend/src/lib/integrations/sync-service';
 import { buildSessionCookie } from '../backend/src/lib/portal-auth';
-import { encryptToken, generateOAuthState, verifyOAuthState } from '../backend/src/lib/integrations/oauth-manager';
+import {
+  verifyOAuthState,
+  resolveTokenEncryptionSecret,
+} from '../backend/src/lib/integrations/oauth-manager';
 import { signHmacSha256 } from './e2e/harness';
 
 describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architecture)', () => {
@@ -74,7 +74,7 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       const client1Invoices = await getTenantInvoices(d1, 1);
       assert.strictEqual(client1Invoices.length, 1);
       assert.strictEqual(client1Invoices[0].invoiceNumber, 'INV-A-101');
-      assert.ok(!client1Invoices.some(i => i.invoiceNumber === 'INV-B-202'));
+      assert.ok(!client1Invoices.some((i) => i.invoiceNumber === 'INV-B-202'));
 
       // 2. getTenantInvoiceByNumber: Client 1 querying Client 2's invoice number returns null
       const crossReadByNumber = await getTenantInvoiceByNumber(d1, 1, 'INV-B-202');
@@ -148,14 +148,18 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
         INSERT INTO chase_log (invoice_id, step, channel, status, body, subject)
         VALUES (${inv1.id}, 1, 'email', 'draft', 'Original draft', 'Subject 1');
       `);
-      const draftId = Number(db.rawSqlite.prepare('SELECT id FROM chase_log WHERE invoice_id = ?').get(inv1.id)?.id);
+      const draftId = Number(
+        db.rawSqlite.prepare('SELECT id FROM chase_log WHERE invoice_id = ?').get(inv1.id)?.id
+      );
 
       // Client 2 attempts to approve Client 1's draft
       const approvedByOther = await approveTenantDraft(d1, 2, draftId, 'Tampered Body', 'Attacker');
       assert.strictEqual(approvedByOther, false);
 
       // Verify draft was NOT modified
-      const draftRow = db.rawSqlite.prepare('SELECT body, status, reviewed_by FROM chase_log WHERE id = ?').get(draftId) as any;
+      const draftRow = db.rawSqlite
+        .prepare('SELECT body, status, reviewed_by FROM chase_log WHERE id = ?')
+        .get(draftId) as any;
       assert.strictEqual(draftRow.status, 'draft');
       assert.strictEqual(draftRow.body, 'Original draft');
       assert.strictEqual(draftRow.reviewed_by, null);
@@ -163,13 +167,17 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       // Client 2 attempts to skip Client 1's draft
       const skippedByOther = await skipTenantDraft(d1, 2, draftId);
       assert.strictEqual(skippedByOther, false);
-      const draftRow2 = db.rawSqlite.prepare('SELECT status FROM chase_log WHERE id = ?').get(draftId) as any;
+      const draftRow2 = db.rawSqlite
+        .prepare('SELECT status FROM chase_log WHERE id = ?')
+        .get(draftId) as any;
       assert.strictEqual(draftRow2.status, 'draft');
 
       // Client 1 approves legitimately
       const approvedByOwner = await approveTenantDraft(d1, 1, draftId, 'Owner Body', 'Owner Name');
       assert.strictEqual(approvedByOwner, true);
-      const finalDraft = db.rawSqlite.prepare('SELECT status, body, reviewed_by FROM chase_log WHERE id = ?').get(draftId) as any;
+      const finalDraft = db.rawSqlite
+        .prepare('SELECT status, body, reviewed_by FROM chase_log WHERE id = ?')
+        .get(draftId) as any;
       assert.strictEqual(finalDraft.status, 'sent');
       assert.strictEqual(finalDraft.body, 'Owner Body');
       assert.strictEqual(finalDraft.reviewed_by, 'Owner Name');
@@ -180,8 +188,8 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       const d1 = db as unknown as D1Database;
 
       const maliciousClientIds = [
-        "1 OR 1=1",
-        "1; DROP TABLE invoices; --",
+        '1 OR 1=1',
+        '1; DROP TABLE invoices; --',
         "' UNION SELECT * FROM invoices --",
         0,
         -1,
@@ -216,12 +224,13 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
           `Failed to reject bad clientId: ${String(badId)}`
         );
         await assert.rejects(
-          async () => upsertTenantInvoice(d1, badId as any, {
-            debtorName: 'Debtor',
-            invoiceNumber: 'INV-1',
-            amountPence: 1000,
-            dueDate: '2026-08-01',
-          }),
+          async () =>
+            upsertTenantInvoice(d1, badId as any, {
+              debtorName: 'Debtor',
+              invoiceNumber: 'INV-1',
+              amountPence: 1000,
+              dueDate: '2026-08-01',
+            }),
           InvalidTenantError,
           `Failed to reject bad clientId: ${String(badId)}`
         );
@@ -270,7 +279,10 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       // External tenant resolution routes to correct internal tenant
       assert.strictEqual(await resolveClientByAccountingTenant(d1, 'xero', 'xero-tenant-alpha'), 1);
       assert.strictEqual(await resolveClientByAccountingTenant(d1, 'xero', 'xero-tenant-beta'), 2);
-      assert.strictEqual(await resolveClientByAccountingTenant(d1, 'xero', 'xero-tenant-gamma'), null);
+      assert.strictEqual(
+        await resolveClientByAccountingTenant(d1, 'xero', 'xero-tenant-gamma'),
+        null
+      );
     });
   });
 
@@ -360,9 +372,11 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       }
 
       // Verify exactly 1 invoice row exists
-      const countRow = db.rawSqlite.prepare(
-        'SELECT COUNT(*) AS total FROM invoices WHERE client_id = 1 AND invoice_number = ?'
-      ).get(invoiceNumber) as any;
+      const countRow = db.rawSqlite
+        .prepare(
+          'SELECT COUNT(*) AS total FROM invoices WHERE client_id = 1 AND invoice_number = ?'
+        )
+        .get(invoiceNumber) as any;
       assert.strictEqual(Number(countRow.total), 1);
 
       // Verify latest values are persisted
@@ -417,7 +431,11 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       inv = await getTenantInvoiceByNumber(d1, 1, 'INV-PAY-PRESERVE');
       assert.ok(inv);
       // STRICT INVARIANT: Status MUST remain 'paid' and paidDate MUST NOT be wiped
-      assert.strictEqual(inv.status, 'paid', 'Invariant violation: paid invoice was downgraded to overdue!');
+      assert.strictEqual(
+        inv.status,
+        'paid',
+        'Invariant violation: paid invoice was downgraded to overdue!'
+      );
       assert.strictEqual(inv.paidDate, '2026-07-15', 'Invariant violation: paidDate was wiped!');
       // Non-status fields can be legitimately updated
       assert.strictEqual(inv.debtorName, 'Alpha Corp Renamed');
@@ -484,7 +502,9 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       `);
 
       // Verify draft is pending
-      const beforeDraft = db.rawSqlite.prepare('SELECT status FROM chase_log WHERE invoice_id = ?').get(inv.id) as any;
+      const beforeDraft = db.rawSqlite
+        .prepare('SELECT status FROM chase_log WHERE invoice_id = ?')
+        .get(inv.id) as any;
       assert.strictEqual(beforeDraft.status, 'draft');
 
       // Payment is reconciled via SyncService
@@ -510,7 +530,9 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       assert.strictEqual(updatedInv?.status, 'paid');
 
       // STRICT INVARIANT: Staged draft MUST be skipped so debtor is not harassed
-      const afterDraft = db.rawSqlite.prepare('SELECT status, reviewed_at FROM chase_log WHERE invoice_id = ?').get(inv.id) as any;
+      const afterDraft = db.rawSqlite
+        .prepare('SELECT status, reviewed_at FROM chase_log WHERE invoice_id = ?')
+        .get(inv.id) as any;
       assert.strictEqual(afterDraft.status, 'skipped');
       assert.ok(afterDraft.reviewed_at);
     });
@@ -534,16 +556,16 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       );
 
       // Exactly ONE returns true (new), 29 return false (duplicate)
-      const trueCount = results.filter(r => r === true).length;
-      const falseCount = results.filter(r => r === false).length;
+      const trueCount = results.filter((r) => r).length;
+      const falseCount = results.filter((r) => !r).length;
 
       assert.strictEqual(trueCount, 1, 'Expected exactly 1 webhook event to be accepted');
       assert.strictEqual(falseCount, 29, 'Expected 29 duplicate webhook events to be rejected');
 
       // Database has exactly 1 row
-      const count = db.rawSqlite.prepare(
-        'SELECT COUNT(*) as total FROM accounting_webhook_events WHERE id = ?'
-      ).get(eventId) as any;
+      const count = db.rawSqlite
+        .prepare('SELECT COUNT(*) as total FROM accounting_webhook_events WHERE id = ?')
+        .get(eventId) as any;
       assert.strictEqual(Number(count.total), 1);
     });
 
@@ -633,8 +655,14 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       assert.ok(html.includes('INV-CL1-ONLY'));
 
       // Client 2's data MUST NOT LEAK
-      assert.ok(!html.includes('INV-CL2-SECRET'), 'Leak: Client 2 invoice number leaked to Client 1!');
-      assert.ok(!html.includes('Client 2 Highly Confidential Debtor'), 'Leak: Client 2 debtor leaked to Client 1!');
+      assert.ok(
+        !html.includes('INV-CL2-SECRET'),
+        'Leak: Client 2 invoice number leaked to Client 1!'
+      );
+      assert.ok(
+        !html.includes('Client 2 Highly Confidential Debtor'),
+        'Leak: Client 2 debtor leaked to Client 1!'
+      );
       assert.ok(!html.includes('Company 2'), 'Leak: Client 2 company name leaked to Client 1!');
     });
 
@@ -653,11 +681,19 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       const location = res.headers.get('Location') ?? '';
 
       const stateParam = new URL(location).searchParams.get('state') ?? '';
-      const verifiedState = await verifyOAuthState(stateParam, env.PORTAL_SESSION_SECRET, 'xero');
+      const verifiedState = await verifyOAuthState(
+        stateParam,
+        await resolveTokenEncryptionSecret(env),
+        'xero'
+      );
 
       // STRICT CHECK: State MUST be bound to authenticated Client 1, NOT spoofed Client 2!
       assert.ok(verifiedState);
-      assert.strictEqual(verifiedState.cid, 1, 'Vulnerability: OAuth state bound to unauthenticated spoofed client_id parameter!');
+      assert.strictEqual(
+        verifiedState.cid,
+        1,
+        'Vulnerability: OAuth state bound to unauthenticated spoofed client_id parameter!'
+      );
     });
 
     test('OAuth Status returns authenticated client status even if client_id query param attempts spoofing', async () => {
@@ -713,7 +749,11 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       });
 
       const res = await worker.fetch(unauthReq, env);
-      assert.strictEqual(res.status, 401, 'Unauthenticated caller must be rejected with 401 Unauthorized');
+      assert.strictEqual(
+        res.status,
+        401,
+        'Unauthenticated caller must be rejected with 401 Unauthorized'
+      );
       const unauthJson = (await res.json()) as any;
       assert.strictEqual(unauthJson.error, 'Unauthorized');
 
@@ -725,7 +765,11 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
       // 2. Unauthenticated status request with ?client_id=2 must be rejected with HTTP 401
       const unauthStatusReq = new Request('http://localhost/api/oauth/xero/status?client_id=2');
       const statusRes = await worker.fetch(unauthStatusReq, env);
-      assert.strictEqual(statusRes.status, 401, 'Unauthenticated status query must be rejected with 401');
+      assert.strictEqual(
+        statusRes.status,
+        401,
+        'Unauthenticated status query must be rejected with 401'
+      );
 
       // 3. Unauthenticated refresh request with { client_id: 2 } must be rejected with HTTP 401
       const unauthRefreshReq = new Request('http://localhost/api/oauth/xero/refresh', {
@@ -734,7 +778,11 @@ describe('Adversarial Challenge Suite: Milestone M1 (Multi-Tenant Data Architect
         body: JSON.stringify({ client_id: 2 }),
       });
       const refreshRes = await worker.fetch(unauthRefreshReq, env);
-      assert.strictEqual(refreshRes.status, 401, 'Unauthenticated refresh query must be rejected with 401');
+      assert.strictEqual(
+        refreshRes.status,
+        401,
+        'Unauthenticated refresh query must be rejected with 401'
+      );
     });
   });
 });

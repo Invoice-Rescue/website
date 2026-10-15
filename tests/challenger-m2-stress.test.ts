@@ -2,13 +2,12 @@ import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createTestEnv } from "./e2e/harness";
 import { statutoryInterestPence, fixedCompensationPence } from "../backend/src/lib/statutory-interest";
-import { buildChasePrompt, draftChaseMessage, type ChasePromptInput } from "../backend/src/lib/gemini";
+import { buildChasePrompt, type ChasePromptInput } from "../backend/src/lib/gemini";
 import {
   runOverdueDetection,
   generateFallbackDraft,
   parseDate,
   diffDays,
-  SENDER_NAME,
   type OverdueInvoiceRow,
 } from "../backend/src/lib/chase-runner";
 import worker from "../backend/src/index";
